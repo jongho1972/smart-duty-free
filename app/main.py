@@ -11,7 +11,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Query
+from fastapi import Body, FastAPI, Query
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -23,6 +23,12 @@ BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 DEFAULT_RATE = 1500.0  # 환율 미확보 시 KRW 환산 추정용 기본값
+
+# --- 비밀번호 게이트 (신라면세점 서브페이지와 동일 비번 0708) ---
+GATE_PASSWORD = "0708"
+AUTH_COOKIE = "sdf_auth"
+AUTH_TOKEN = "ok-0708"          # 인증 통과 표식(개인 도구 수준)
+AUTH_MAX_AGE = 60 * 60 * 12     # 12시간
 
 
 @asynccontextmanager
@@ -118,11 +124,26 @@ async def compare(brand: str, product: str) -> dict:
     }
 
 
+@app.post("/api/verify")
+async def api_verify(payload: dict = Body(default={})):
+    """비밀번호 확인 → 통과 시 인증 쿠키 설정."""
+    if (payload or {}).get("password") == GATE_PASSWORD:
+        resp = JSONResponse({"ok": True})
+        resp.set_cookie(
+            AUTH_COOKIE, AUTH_TOKEN, max_age=AUTH_MAX_AGE,
+            httponly=True, samesite="lax", secure=True, path="/")
+        return resp
+    return JSONResponse({"ok": False}, status_code=401)
+
+
 @app.get("/api/compare")
 async def api_compare(
+    request: Request,
     brand: str = Query("", description="브랜드명"),
     product: str = Query("", description="상품명/모델"),
 ):
+    if request.cookies.get(AUTH_COOKIE) != AUTH_TOKEN:
+        return JSONResponse({"error": "auth_required"}, status_code=401)
     return JSONResponse(await compare(brand.strip(), product.strip()))
 
 

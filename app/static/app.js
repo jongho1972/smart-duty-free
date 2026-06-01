@@ -18,6 +18,10 @@ form.addEventListener("submit", async (e) => {
   try {
     const params = new URLSearchParams({ brand, product });
     const res = await fetch(`/api/compare?${params.toString()}`);
+    if (res.status === 401) {
+      if (window.__showAuthGate) window.__showAuthGate();
+      return;
+    }
     const data = await res.json();
     render(data, brand, product);
   } catch (err) {
