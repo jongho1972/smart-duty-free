@@ -1,40 +1,129 @@
-const form = document.getElementById("search-form");
 const results = document.getElementById("results");
 const hint = document.getElementById("hint");
-const submitBtn = document.getElementById("submit-btn");
 const SHOP_ORDER = ["신라", "롯데", "신세계"];
 
-form.addEventListener("submit", async (e) => {
+const batchForm = document.getElementById("batch-form");
+const batchInput = document.getElementById("batch-input");
+const batchBtn = document.getElementById("batch-btn");
+const MAX_BATCH_ROWS = 20;
+
+// 일괄 입력 파싱: 한 줄 = "모델코드〈Tab 또는 2칸+ 공백〉브랜드"
+function parseBatch(raw) {
+  return (raw || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(/\t+|\s{2,}/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        return { product: parts[0], brand: parts.slice(1).join(" "), raw: line };
+      }
+      return { product: parts[0] || line, brand: "", raw: line };
+    });
+}
+
+batchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const brand = document.getElementById("brand").value.trim();
-  const product = document.getElementById("product").value.trim();
-  if (!brand && !product) {
-    flashHint("브랜드명 또는 상품명을 입력해 주세요.");
+  let rows = parseBatch(batchInput.value);
+  if (rows.length === 0) {
+    flashHint("비교할 상품 목록을 한 줄에 하나씩 붙여넣어 주세요.");
     return;
   }
+  let truncated = false;
+  if (rows.length > MAX_BATCH_ROWS) {
+    rows = rows.slice(0, MAX_BATCH_ROWS);
+    truncated = true;
+  }
 
-  setLoading(true);
-  results.hidden = true;
+  setBatchLoading(true);
+  results.hidden = false;
+  results.innerHTML = `
+    <div class="table-wrap">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>상품명</th><th>브랜드명</th><th>면세가</th>
+            <th>신라 할인률</th><th>롯데 할인률</th><th>신세계 할인률</th><th>가격확인</th>
+          </tr>
+        </thead>
+        <tbody id="compare-body"></tbody>
+      </table>
+    </div>
+    <p class="note">· 상품명·브랜드명은 입력값 그대로이며, <b>면세가</b>는 정가(USD) 대표값입니다.<br/>
+    · 가격·할인율은 조회 시점의 각 인터넷면세점 공개 정보 기준입니다.</p>`;
+  const tbody = results.querySelector("#compare-body");
+  const prog = document.createElement("div");
+  prog.className = "batch-progress";
+  results.appendChild(prog);
+
   try {
-    const params = new URLSearchParams({ brand, product });
-    const res = await fetch(`/api/compare?${params.toString()}`);
-    if (res.status === 401) {
-      if (window.__showAuthGate) window.__showAuthGate();
-      return;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      prog.textContent = `조회 중… (${i + 1}/${rows.length}) ${row.raw}`;
+      let tr;
+      try {
+        const params = new URLSearchParams({ brand: row.brand, product: row.product });
+        const res = await fetch(`/api/compare?${params.toString()}`);
+        if (res.status === 401) {
+          if (window.__showAuthGate) window.__showAuthGate();
+          return;
+        }
+        const data = await res.json();
+        tr = buildProductRow(data, row);
+      } catch (err) {
+        tr = buildErrorRow(row);
+      }
+      tbody.insertAdjacentHTML("beforeend", tr);
     }
-    const data = await res.json();
-    render(data, brand, product);
-  } catch (err) {
-    results.hidden = false;
-    results.innerHTML = `<div class="error-box">조회 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.</div>`;
   } finally {
-    setLoading(false);
+    prog.remove();
+    setBatchLoading(false);
+  }
+
+  if (truncated) {
+    flashHint(`한 번에 최대 ${MAX_BATCH_ROWS}건까지만 비교합니다. 나머지는 다시 나눠 조회해 주세요.`);
   }
 });
 
-function setLoading(on) {
+function setBatchLoading(on) {
   document.body.classList.toggle("loading", on);
-  submitBtn.disabled = on;
+  batchBtn.disabled = on;
+}
+
+// --- 클립보드 붙여넣기 버튼 ---
+document.querySelectorAll(".paste-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        throw new Error("clipboard-unavailable");
+      }
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        flashHint("클립보드가 비어 있습니다.");
+        input.focus();
+        return;
+      }
+      input.value = text;
+      input.focus();
+      markPasted(btn);
+    } catch (err) {
+      // 권한 거부·구형 브라우저·비보안 컨텍스트 → 포커스 폴백
+      input.focus();
+      flashHint("자동 붙여넣기가 막혀 있어요. 입력칸에서 직접 붙여넣기(⌘V / Ctrl+V) 해 주세요.");
+    }
+  });
+});
+
+function markPasted(btn) {
+  const orig = btn.textContent;
+  btn.classList.add("done");
+  btn.textContent = "붙여넣음";
+  setTimeout(() => {
+    btn.classList.remove("done");
+    btn.textContent = orig;
+  }, 1300);
 }
 
 function flashHint(msg) {
@@ -47,96 +136,60 @@ function fmtUsd(v) {
   if (v === null || v === undefined) return null;
   return "$" + (Number.isInteger(v) ? v : v.toFixed(2));
 }
-function fmtKrw(v) {
-  if (v === null || v === undefined) return null;
-  return v.toLocaleString("ko-KR") + "원";
-}
 
-function render(data, brand, product) {
-  results.hidden = false;
-  if (data.error) {
-    results.innerHTML = `<div class="error-box">${data.error}</div>`;
-    return;
-  }
+// 조회 결과 1건 → 상품별 한 행(<tr>). 공기관 제출용 심플 양식: 뱃지 없음.
+// 상품명·브랜드명은 입력값(row) 그대로 표기한다.
+function buildProductRow(data, row) {
+  if (data.error) return buildErrorRow(row);
 
   const shops = data.shops || {};
-  const found = SHOP_ORDER.map((s) => shops[s]).filter((s) => s && s.found);
+  const errors = data.errors || {};
 
-  if (found.length === 0) {
-    results.innerHTML = `
-      <div class="error-box">
-        입력하신 조건(<b>${escapeHtml(brand)} ${escapeHtml(product)}</b>)에 해당하는 상품을
-        3개 면세점에서 찾지 못했습니다.<br/>
-        모델 코드를 더 정확히 입력하거나(예: 색상코드 포함) 영문/숫자 표기를 확인해 주세요.
-      </div>`;
-    return;
-  }
-
-  // 대표 상품명/브랜드 (가장 정보가 많은 매칭에서)
-  const repName = found[0].name || product;
-  const repBrand = (found.find((f) => f.brand) || {}).brand || brand;
-
-  // 최저 판매가(USD) 찾기 → best 강조
-  let bestShop = null;
-  let bestPrice = Infinity;
+  // 면세가(대표 정가, 신라 우선)
+  let faceUsd = null;
   for (const s of SHOP_ORDER) {
     const r = shops[s];
-    if (r && r.found && r.price_sale != null && r.price_sale < bestPrice) {
-      bestPrice = r.price_sale;
-      bestShop = s;
-    }
+    if (r && r.found && r.price_origin != null) { faceUsd = r.price_origin; break; }
   }
 
-  const rows = SHOP_ORDER.map((shop) => {
-    const r = shops[shop] || { found: false };
-    const isBest = shop === bestShop;
-    if (!r.found) {
-      const errored = (data.errors || {})[shop];
-      return `
-        <tr>
-          <td data-label="면세점"><span class="shop-tag shop-${shop}">${shop}</span></td>
-          <td data-label="상품명" class="na">${errored ? "조회 실패" : "해당 상품 없음"}</td>
-          <td data-label="정가" class="na">—</td>
-          <td data-label="할인율" class="na">—</td>
-          <td data-label="판매가($)" class="na">—</td>
-          <td data-label="판매가(원)" class="na">—</td>
-          <td data-label="링크" class="na">—</td>
-        </tr>`;
+  const rateCell = (shop) => {
+    const r = shops[shop];
+    if (!r || !r.found) {
+      return `<td data-label="${shop} 할인률" class="na">${errors[shop] ? "실패" : "—"}</td>`;
     }
-    const krw = fmtKrw(r.price_krw);
-    const krwCls = r.krw_estimated ? "krw-approx" : "price-krw";
-    const krwTxt = krw ? (r.krw_estimated ? "≈ " + krw : krw) : "—";
-    return `
-      <tr class="${isBest ? "best" : ""}">
-        <td data-label="면세점"><span class="shop-tag shop-${shop}">${shop}</span></td>
-        <td data-label="상품명">${escapeHtml(r.name || "")}${r.soldout ? '<span class="badge-soldout">품절</span>' : ""}</td>
-        <td data-label="정가">${fmtUsd(r.price_origin) ? `<span class="price-origin">${fmtUsd(r.price_origin)}</span>` : "—"}</td>
-        <td data-label="할인율"><span class="rate" style="color:${isBest ? "var(--best)" : "var(--crimson)"}">${r.discount_rate != null ? r.discount_rate + "%" : "—"}</span></td>
-        <td data-label="판매가($)"><span class="price-sale">${fmtUsd(r.price_sale) || "—"}</span>${isBest ? '<span class="badge-best">최저가</span>' : ""}</td>
-        <td data-label="판매가(원)"><span class="${krwCls}">${krwTxt}</span></td>
-        <td data-label="링크">${r.url ? `<a class="go-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">바로가기 ↗</a>` : "—"}</td>
-      </tr>`;
-  }).join("");
+    const rate = r.discount_rate != null ? r.discount_rate + "%" : "—";
+    return `<td data-label="${shop} 할인률"><span class="rate">${rate}</span></td>`;
+  };
 
-  results.innerHTML = `
-    <div class="result-head">
-      <h2>${escapeHtml(repBrand)} · ${escapeHtml(repName)}</h2>
-      <span class="sub">검색어 “${escapeHtml(data.query.keyword)}” 기준 · 환율 $1≈${data.exchange_rate.toLocaleString("ko-KR")}원</span>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>면세점</th><th>상품명</th><th>정가</th><th>할인율</th>
-            <th>판매가($)</th><th>판매가(원)</th><th>가격 확인</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-    <p class="note">· “판매가(원)” 중 <b>≈</b> 표시는 달러 판매가에 환율을 적용한 추정값입니다(롯데는 사이트 제공 정확값).<br/>
-    · 면세점별로 상품명 표기(예: 신라·롯데 “파도바”, 신세계 “VVCC25”)가 달라도 동일 모델이면 함께 비교됩니다.</p>
-  `;
+  const links = SHOP_ORDER
+    .filter((s) => shops[s] && shops[s].found && shops[s].url)
+    .map((s) => `<a class="shop-link" href="${escapeHtml(shops[s].url)}" target="_blank" rel="noopener">${s} ↗</a>`)
+    .join("");
+
+  return `
+    <tr>
+      <td data-label="상품명">${escapeHtml(row.product || row.raw || "")}</td>
+      <td data-label="브랜드명">${escapeHtml(row.brand || "")}</td>
+      <td data-label="면세가">${faceUsd != null ? fmtUsd(faceUsd) : "—"}</td>
+      ${rateCell("신라")}
+      ${rateCell("롯데")}
+      ${rateCell("신세계")}
+      <td data-label="가격확인" class="link-cell">${links || "—"}</td>
+    </tr>`;
+}
+
+// 조회 실패/미발견 행: 컬럼 형태는 유지하고 값만 "—"
+function buildErrorRow(row) {
+  return `
+    <tr>
+      <td data-label="상품명">${escapeHtml(row.product || row.raw || "")}</td>
+      <td data-label="브랜드명">${escapeHtml(row.brand || "")}</td>
+      <td data-label="면세가" class="na">—</td>
+      <td data-label="신라 할인률" class="na">—</td>
+      <td data-label="롯데 할인률" class="na">—</td>
+      <td data-label="신세계 할인률" class="na">—</td>
+      <td data-label="가격확인" class="na">—</td>
+    </tr>`;
 }
 
 function escapeHtml(s) {

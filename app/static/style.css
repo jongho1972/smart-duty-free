@@ -7,9 +7,6 @@
   --paper: #FAFAF8;
   --line: #e7e1dd;
   --muted: #8a8079;
-  --shilla: #8C0023;
-  --lotte: #d2293b;
-  --ssg: #111111;
   --best: #0a7d4d;
 }
 
@@ -57,15 +54,13 @@ body {
   background-clip: text;
   color: transparent;
 }
-.lede { margin: 0; opacity: .92; font-size: clamp(.95rem, 2.4vw, 1.08rem); }
 
-/* ---------- search ---------- */
+/* ---------- 일괄 입력 카드 ---------- */
 main { max-width: 920px; margin: 0 auto; padding: 0 20px 60px; }
-.search-card {
+
+.batch-card {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
   gap: 16px;
-  align-items: end;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -73,28 +68,40 @@ main { max-width: 920px; margin: 0 auto; padding: 0 20px 60px; }
   margin-top: -34px;
   box-shadow: 0 22px 50px -28px rgba(140, 0, 35, .45);
 }
-.field { display: flex; flex-direction: column; gap: 7px; }
-.field label {
-  font-size: .8rem;
-  font-weight: 700;
-  color: var(--crimson);
+.batch-card[hidden] { display: none; }
+.batch-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.field input {
-  font-family: inherit;
-  font-size: 1rem;
+.batch-card textarea {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: .92rem;
+  line-height: 1.6;
+  width: 100%;
+  resize: vertical;
   padding: 13px 14px;
   border: 1.5px solid var(--line);
   border-radius: 12px;
   background: #fff;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
   transition: border-color .15s, box-shadow .15s;
 }
-.field input:focus {
+.batch-card textarea:focus {
   outline: none;
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(184, 146, 42, .18);
 }
-#submit-btn {
+/* 라벨 옆 붙여넣기 버튼은 인라인 배치(입력칸 오버레이 아님) */
+.batch-label-row .paste-btn { position: static; transform: none; }
+.batch-label-row .paste-btn:active { transform: scale(.96); }
+#batch-btn {
   position: relative;
+  justify-self: start;
   font-family: "Outfit", "Noto Sans KR", sans-serif;
   font-weight: 800;
   font-size: 1rem;
@@ -102,15 +109,74 @@ main { max-width: 920px; margin: 0 auto; padding: 0 20px 60px; }
   background: linear-gradient(135deg, var(--crimson), var(--crimson-dark));
   border: none;
   border-radius: 12px;
-  padding: 14px 26px;
+  padding: 14px 30px;
   cursor: pointer;
-  white-space: nowrap;
   transition: transform .12s, box-shadow .2s, opacity .2s;
   box-shadow: 0 10px 22px -12px rgba(140, 0, 35, .8);
 }
-#submit-btn:hover { transform: translateY(-1px); }
-#submit-btn:active { transform: translateY(0); }
-#submit-btn[disabled] { opacity: .65; cursor: progress; }
+#batch-btn:hover { transform: translateY(-1px); }
+#batch-btn[disabled] { opacity: .65; cursor: progress; }
+
+/* 일괄 진행 표시 + 결과 블록 */
+.batch-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--crimson);
+  font-size: .9rem;
+  font-weight: 700;
+  margin: 4px 4px 18px;
+}
+.batch-progress::before {
+  content: "";
+  width: 16px; height: 16px;
+  border: 2.5px solid rgba(140, 0, 35, .25);
+  border-top-color: var(--crimson);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex: none;
+}
+.field { display: flex; flex-direction: column; gap: 7px; }
+.field label {
+  font-size: .8rem;
+  font-weight: 700;
+  color: var(--crimson);
+}
+.paste-btn {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--crimson);
+  background: #faf2f3;
+  border: 1px solid rgba(140, 0, 35, .18);
+  border-radius: 8px;
+  padding: 6px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.paste-btn::before {
+  content: "";
+  width: 12px; height: 12px;
+  background: var(--crimson);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2m-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2m7 18H5V4h2v3h10V4h2z'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2m-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2m7 18H5V4h2v3h10V4h2z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.paste-btn:hover { background: #f3e3e5; border-color: rgba(140, 0, 35, .35); }
+.paste-btn:active { transform: translateY(-50%) scale(.96); }
+.paste-btn.done {
+  color: var(--best);
+  background: rgba(10, 125, 77, .1);
+  border-color: rgba(10, 125, 77, .3);
+}
+.paste-btn.done::before { background: var(--best); }
 .spinner {
   display: none;
   position: absolute;
@@ -130,19 +196,6 @@ body.loading .btn-label { visibility: hidden; }
 
 /* ---------- results ---------- */
 .results { margin-top: 34px; }
-.result-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px 14px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-.result-head h2 {
-  font-family: "Outfit", "Noto Sans KR", sans-serif;
-  font-size: 1.4rem;
-  margin: 0;
-}
-.result-head .sub { color: var(--muted); font-size: .9rem; }
 
 .table-wrap {
   border: 1px solid var(--line);
@@ -163,81 +216,35 @@ thead th {
 }
 tbody tr { border-bottom: 1px solid var(--line); }
 tbody tr:last-child { border-bottom: none; }
-tbody tr.best { background: linear-gradient(90deg, rgba(10,125,77,.08), transparent 70%); }
 
-.shop-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-weight: 800;
-  font-family: "Outfit","Noto Sans KR",sans-serif;
-}
-.shop-tag::before {
-  content: "";
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--dot, #999);
-}
-.shop-신라 { --dot: var(--shilla); }
-.shop-롯데 { --dot: var(--lotte); }
-.shop-신세계 { --dot: var(--ssg); }
+/* 상품별 비교 표 (공기관 제출용 심플 양식) */
+.compare-table td[data-label="상품명"] { font-weight: 700; }
+.compare-table td[data-label="브랜드명"] { color: var(--muted); }
 
 .rate {
-  font-family: "Outfit", sans-serif;
-  font-weight: 900;
-  font-size: 1.15rem;
-}
-.price-sale {
   font-family: "Outfit", sans-serif;
   font-weight: 800;
   font-size: 1.05rem;
 }
-.price-origin { color: var(--muted); text-decoration: line-through; font-size: .85rem; }
-.price-krw { color: var(--ink); font-size: .9rem; }
-.krw-approx { color: var(--muted); font-size: .78rem; }
 
-.badge-best {
-  display: inline-block;
-  background: var(--best);
-  color: #fff;
-  font-size: .68rem;
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 999px;
-  margin-left: 8px;
-  vertical-align: middle;
-}
-.badge-soldout {
-  display: inline-block;
-  background: #eee;
-  color: #777;
-  font-size: .68rem;
+/* 가격확인 링크 */
+.link-cell { white-space: nowrap; }
+.shop-link {
+  font-family: "Outfit", "Noto Sans KR", sans-serif;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  margin-left: 6px;
-}
-
-.go-link {
-  font-family: "Outfit","Noto Sans KR",sans-serif;
-  font-weight: 700;
+  font-size: .9rem;
   color: var(--crimson);
   text-decoration: none;
-  border-bottom: 1.5px solid rgba(140,0,35,.25);
+  border-bottom: 1.5px solid transparent;
+  margin-right: 12px;
   white-space: nowrap;
 }
-.go-link:hover { border-bottom-color: var(--crimson); }
+.shop-link:last-child { margin-right: 0; }
+.shop-link:hover { border-bottom-color: currentColor; }
+
 .na { color: var(--muted); }
 
 .note { color: var(--muted); font-size: .82rem; margin: 14px 4px 0; }
-.error-box {
-  background: #fff4f4;
-  border: 1px solid #f3c9c9;
-  color: #99202a;
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-top: 12px;
-  font-size: .9rem;
-}
 
 footer {
   border-top: 1px solid var(--line);
@@ -249,12 +256,8 @@ footer {
 footer p { margin: 4px 0; }
 footer .muted { opacity: .8; }
 
-.pc-only { display: inline; }
-
 @media (max-width: 720px) {
-  .search-card { grid-template-columns: 1fr; }
-  #submit-btn { width: 100%; padding: 15px; }
-  .pc-only { display: none; }
+  #batch-btn { width: 100%; justify-self: stretch; padding: 15px; }
   thead { display: none; }
   table, tbody, tr, td { display: block; width: 100%; }
   tbody tr { padding: 14px 16px; }
@@ -265,5 +268,4 @@ footer .muted { opacity: .8; }
     color: var(--crimson);
     font-size: .82rem;
   }
-  td .go-link { text-align: right; }
 }
