@@ -316,6 +316,7 @@ def fetch_shilla(keyword: str) -> list[Product]:
 #   → Playwright 브라우저 컨텍스트를 캐시해 두고 그 안에서 검색 페이지를 연다.
 # ---------------------------------------------------------------------------
 SSG_HOME = "https://www.ssgdfs.com/kr/main/initMain"
+SSG_LOGIN = "https://www.ssgdfs.com/kr/login/login"
 SSG_SEARCH = "https://www.ssgdfs.com/kr/search/resultsTotal?startCount=0&query={kw}"
 SSG_DETAIL = "https://www.ssgdfs.com/kr/goos/initDetailGoos?goos_cd={cd}"
 
@@ -351,6 +352,7 @@ class _SsgBrowser:
         self._browser = None
         self._ctx = None
         self._lock = asyncio.Lock()
+        self._logged_in = False  # 회원 로그인 1회 수행 여부
 
     async def _ensure(self):
         from playwright.async_api import async_playwright
@@ -383,6 +385,46 @@ class _SsgBrowser:
             except Exception:
                 pass
         self._pw = self._browser = self._ctx = None
+        self._logged_in = False
+
+    async def _ensure_login(self) -> None:
+        """WAF 통과 컨텍스트에서 회원 로그인 1회 수행(쿠키는 컨텍스트에 유지).
+
+        비번이 클라이언트(KISA) 암호화라 레이어 로그인 폼을 직접 채워 제출한다.
+        자격증명 없거나 실패해도 1회만 시도하고 비로그인으로 검색을 진행한다.
+        """
+        if self._logged_in:
+            return
+        sid, spw = os.getenv("SSG_ID"), os.getenv("SSG_PW")
+        if not sid or not spw:
+            self._logged_in = True
+            return
+        page = await self._ctx.new_page()
+        try:
+            # 홈을 먼저 열어 WAF 쿠키 확보 후 로그인 페이지로 이동(직접 진입은 WAF 차단)
+            await page.goto(SSG_HOME, wait_until="domcontentloaded", timeout=30000)
+            await page.goto(SSG_LOGIN, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(800)
+            await page.evaluate(
+                "() => document.querySelectorAll('[class*=notiPop],.dimmed').forEach(e=>e.remove())")
+            await page.wait_for_selector("#login_id", timeout=8000)
+            # 반드시 "신세계면세점 회원" 탭(loginTab02)에서 로그인(통합회원 아님)
+            await page.click("#loginTab02")
+            await page.wait_for_timeout(400)
+            # 로그인 실패 누적 시 캡차가 요구됨 → 자동 로그인 불가, 시도 중단(잠금 방지)
+            captcha = await page.evaluate(
+                "() => (document.getElementById('captchaTypeCd')||{}).value || ''")
+            if not captcha:
+                await page.fill("#login_id", sid)
+                await page.fill("#pwd", spw)
+                # 제출 버튼(loginTryCheck가 KISA 암호화+AJAX 로그인 수행)
+                await page.click("#loginSubmitBtn")
+                await page.wait_for_timeout(3500)
+        except Exception:
+            pass
+        finally:
+            await page.close()
+            self._logged_in = True  # 성공/실패 무관 1회만 시도(매 검색 재시도·캡차 잠금 방지)
 
     async def search(self, keyword: str) -> list[Product]:
         # WAF가 직접 URL 진입을 차단하므로, 홈에서 검색 폼을 submit 해 결과로 이동한다.
@@ -391,6 +433,7 @@ class _SsgBrowser:
             for attempt in range(2):
                 try:
                     await self._ensure()
+                    await self._ensure_login()  # 최초 1회 회원 로그인
                     page = await self._ctx.new_page()
                     try:
                         await page.goto(SSG_HOME, wait_until="domcontentloaded", timeout=30000)
