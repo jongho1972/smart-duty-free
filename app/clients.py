@@ -137,6 +137,8 @@ def _num(s: str) -> Optional[float]:
 # 가벼운 curl_cffi 검색에 그 쿠키를 재사용한다(신세계 WAF 쿠키 패턴의 확장).
 LOTTE_LOGIN_URL = "https://kor.lps.lottedfs.com/kr/member/login"
 LOTTE_COOKIE_TTL = 30 * 60  # 30분
+# 비로그인 시 검색 목록이 할인율 대신 노출하는 문구 → 로그인 성공/세션 판정에 사용
+_LOTTE_LOGIN_MARKER = "로그인 후 할인율 확인"
 
 _lotte_cookies: Optional[dict] = None
 _lotte_cookies_at: float = 0.0
@@ -167,6 +169,16 @@ async def _do_lotte_login() -> Optional[dict]:
                 await page.evaluate("() => doLpointLogin('N')")
         except Exception:
             await page.wait_for_timeout(3000)  # 페이지 내 처리(비이동)일 수 있음
+        # 로그인 성공 검증: 검색 목록에 "로그인 후 할인율 확인"이 사라졌는지 확인.
+        # (ID/PW 오류 등으로 실패하면 비로그인 쿠키를 성공으로 캐싱하지 않도록)
+        try:
+            await page.goto(LOTTE_SEARCH.format(kw="tumi"),
+                            wait_until="domcontentloaded", timeout=20000)
+            html = await page.content()
+        except Exception:
+            html = ""
+        if not html or _LOTTE_LOGIN_MARKER in html:
+            return None  # 로그인 미완료 → 캐싱하지 않음(다음 호출에서 재시도)
         cookies = await ctx.cookies()
         jar = {c["name"]: c["value"] for c in cookies
                if "lottedfs.com" in (c.get("domain") or "")}
@@ -207,6 +219,9 @@ def fetch_lotte(keyword: str, cookies: Optional[dict] = None) -> list[Product]:
     r = creq.get(url, headers={"User-Agent": UA}, impersonate="chrome",
                  timeout=TIMEOUT, cookies=cookies or None)
     r.raise_for_status()
+    # 로그인 쿠키를 줬는데도 비로그인 문구가 보이면 세션 만료/실패 → 다음 호출 재로그인
+    if cookies and _LOTTE_LOGIN_MARKER in r.text:
+        invalidate_lotte_login()
     soup = BeautifulSoup(r.text, "html.parser")
     out: list[Product] = []
     for li in soup.select("ol#unitStyleList > li"):
