@@ -24,6 +24,24 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 DEFAULT_RATE = 1500.0  # 환율 미확보 시 KRW 환산 추정용 기본값
 
+
+def _asset_version() -> str:
+    """정적 자산(js/css)의 최신 mtime → 캐시버스팅 버전.
+
+    배포 시 git checkout으로 파일 mtime이 갱신되므로 버전이 바뀌어
+    브라우저가 이전 app.js/style.css를 캐시로 재사용하는 문제를 막는다.
+    """
+    latest = 0
+    for p in (BASE_DIR / "static").glob("*"):
+        try:
+            latest = max(latest, int(p.stat().st_mtime))
+        except OSError:
+            pass
+    return str(latest)
+
+
+ASSET_VERSION = _asset_version()
+
 # --- 비밀번호 게이트 (신라면세점 서브페이지와 동일 비번 0708) ---
 GATE_PASSWORD = "0708"
 AUTH_COOKIE = "sdf_auth"
@@ -149,7 +167,8 @@ async def api_compare(
 
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(
+        request, "index.html", {"v": ASSET_VERSION})
 
 
 @app.get("/healthz")
