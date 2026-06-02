@@ -152,7 +152,7 @@ body.loading .btn-label { visibility: hidden; }
   justify-content: flex-end;
   margin-bottom: 10px;
 }
-#csv-btn {
+#excel-btn {
   font-family: inherit;
   font-weight: 700;
   font-size: .85rem;
@@ -164,8 +164,8 @@ body.loading .btn-label { visibility: hidden; }
   cursor: pointer;
   transition: background .15s, border-color .15s, opacity .15s;
 }
-#csv-btn:hover:not([disabled]) { background: var(--blue-025); border-color: var(--blue-500); }
-#csv-btn[disabled] { opacity: .5; cursor: default; }
+#excel-btn:hover:not([disabled]) { background: var(--blue-025); border-color: var(--blue-500); }
+#excel-btn[disabled] { opacity: .5; cursor: default; }
 
 .table-wrap {
   border: 1px solid var(--slate-100);

@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -186,6 +186,56 @@ async def api_compare(
     if request.cookies.get(AUTH_COOKIE) != AUTH_TOKEN:
         return JSONResponse({"error": "auth_required"}, status_code=401)
     return JSONResponse(await compare(brand.strip(), product.strip()))
+
+
+EXPORT_HEADERS = ["상품명", "브랜드명", "면세가", "신라 할인률", "롯데 할인률", "신세계 할인률"]
+EXPORT_SHOPS = ["신라", "롯데", "신세계"]
+
+
+@app.post("/api/export")
+async def api_export(request: Request, payload: dict = Body(default={})):
+    """결과를 .xlsx로 생성(각 면세점 할인률 셀에 상품 페이지 하이퍼링크 포함)."""
+    if request.cookies.get(AUTH_COOKIE) != AUTH_TOKEN:
+        return JSONResponse({"error": "auth_required"}, status_code=401)
+
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    rows = (payload or {}).get("rows") or []
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "가격비교"
+    ws.append(EXPORT_HEADERS)
+    head_font = Font(bold=True, color="0B2E5C")
+    for c in ws[1]:
+        c.font = head_font
+    link_font = Font(color="1F6FEB", underline="single")
+
+    for r in rows:
+        shops = (r or {}).get("shops") or {}
+        ws.append([r.get("product", ""), r.get("brand", ""), r.get("face", ""), "", "", ""])
+        rownum = ws.max_row
+        for i, s in enumerate(EXPORT_SHOPS):
+            cell = ws.cell(row=rownum, column=4 + i)
+            sh = shops.get(s) or {}
+            cell.value = sh.get("rate") or "—"
+            url = sh.get("url")
+            if url:
+                cell.hyperlink = url
+                cell.font = link_font
+
+    for col, width in zip("ABCDEF", (30, 20, 10, 13, 13, 13)):
+        ws.column_dimensions[col].width = width
+    ws.freeze_panes = "A2"
+
+    buf = BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="price_compare.xlsx"'},
+    )
 
 
 @app.get("/")

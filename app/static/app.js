@@ -7,9 +7,8 @@ const batchInput = document.getElementById("batch-input");
 const batchBtn = document.getElementById("batch-btn");
 const MAX_BATCH_ROWS = 20;
 
-// CSV 다운로드용 누적 데이터 (표와 동일한 7개 컬럼)
-const CSV_HEADER = ["상품명", "브랜드명", "면세가", "신라 할인률", "롯데 할인률", "신세계 할인률", "가격확인 링크"];
-let csvRows = [];
+// 엑셀(.xlsx) 다운로드용 누적 데이터 (면세점별 할인률+링크를 구조화해 보관)
+let exportRows = [];
 
 // 일괄 입력 파싱: 한 줄 = "모델코드〈Tab 또는 2칸+ 공백〉브랜드"
 function parseBatch(raw) {
@@ -41,10 +40,10 @@ batchForm.addEventListener("submit", async (e) => {
 
   setBatchLoading(true);
   results.hidden = false;
-  csvRows = [];
+  exportRows = [];
   results.innerHTML = `
     <div class="results-toolbar">
-      <button type="button" id="csv-btn" disabled>CSV 다운로드</button>
+      <button type="button" id="excel-btn" disabled>엑셀 다운로드</button>
     </div>
     <div class="table-wrap">
       <table class="compare-table">
@@ -57,10 +56,11 @@ batchForm.addEventListener("submit", async (e) => {
         <tbody id="compare-body"></tbody>
       </table>
     </div>
-    <p class="note">· 상품명·브랜드명은 입력값 그대로이며, <b>면세가</b>는 정가(USD) 대표값입니다.</p>`;
+    <p class="note">· 상품명·브랜드명은 입력값 그대로이며, <b>면세가</b>는 정가(USD) 대표값입니다.<br/>
+    · <b>엑셀 다운로드</b> 시 각 면세점 할인률 셀에 상품 페이지 하이퍼링크가 포함됩니다.</p>`;
   const tbody = results.querySelector("#compare-body");
-  const csvBtn = results.querySelector("#csv-btn");
-  csvBtn.addEventListener("click", downloadCsv);
+  const excelBtn = results.querySelector("#excel-btn");
+  excelBtn.addEventListener("click", downloadExcel);
   const prog = document.getElementById("batch-progress");
   prog.hidden = false;
 
@@ -83,12 +83,12 @@ batchForm.addEventListener("submit", async (e) => {
         tr = buildErrorRow(row);
       }
       tbody.insertAdjacentHTML("beforeend", tr);
-      csvRows.push(extractCsvRow(data, row));
+      exportRows.push(extractExportRow(data, row));
     }
   } finally {
     prog.hidden = true;
     prog.textContent = "";
-    csvBtn.disabled = csvRows.length === 0;
+    excelBtn.disabled = exportRows.length === 0;
     setBatchLoading(false);
   }
 
@@ -164,43 +164,47 @@ function faceValue(shops) {
   return null;
 }
 
-// 조회 결과 1건 → CSV 한 행(표와 동일 7컬럼). 링크는 "면세점 URL" 형태.
-function extractCsvRow(data, row) {
+// 조회 결과 1건 → 엑셀용 구조화 행(면세점별 할인률+상품 링크).
+function extractExportRow(data, row) {
   const shops = (data && data.shops) || {};
   const errors = (data && data.errors) || {};
   const faceUsd = faceValue(shops);
-  const rateOf = (s) => {
+  const cell = (s) => {
     const r = shops[s];
-    if (!r || !r.found) return errors[s] ? "실패" : "";
-    return r.discount_rate != null ? r.discount_rate + "%" : "";
+    if (!r || !r.found) return { rate: errors[s] ? "실패" : "", url: null };
+    return {
+      rate: r.discount_rate != null ? r.discount_rate + "%" : "",
+      url: r.url || null,
+    };
   };
-  const links = SHOP_ORDER
-    .filter((s) => shops[s] && shops[s].found && shops[s].url)
-    .map((s) => `${s} ${shops[s].url}`)
-    .join(" | ");
-  return [
-    row.product || row.raw || "",
-    row.brand || "",
-    faceUsd != null ? fmtUsd(faceUsd) : "",
-    rateOf("신라"), rateOf("롯데"), rateOf("신세계"),
-    links,
-  ];
+  return {
+    product: row.product || row.raw || "",
+    brand: row.brand || "",
+    face: faceUsd != null ? fmtUsd(faceUsd) : "",
+    shops: { "신라": cell("신라"), "롯데": cell("롯데"), "신세계": cell("신세계") },
+  };
 }
 
-// CSV 문자열 생성(엑셀 한글 호환 위해 UTF-8 BOM 부착)
-function buildCsv(header, dataRows) {
-  const esc = (s) => {
-    const v = String(s == null ? "" : s);
-    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-  };
-  const lines = [header, ...dataRows].map((r) => r.map(esc).join(","));
-  return "﻿" + lines.join("\r\n");
-}
-
-function downloadCsv() {
-  if (!csvRows.length) return;
-  const csv = buildCsv(CSV_HEADER, csvRows);
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+// 서버에서 .xlsx 생성(각 할인률 셀에 클릭 가능한 하이퍼링크) → 다운로드
+async function downloadExcel() {
+  if (!exportRows.length) return;
+  let blob;
+  try {
+    const res = await fetch("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: exportRows }),
+    });
+    if (res.status === 401) {
+      if (window.__showAuthGate) window.__showAuthGate();
+      return;
+    }
+    if (!res.ok) throw new Error("export-failed");
+    blob = await res.blob();
+  } catch (err) {
+    flashHint("엑셀 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const d = new Date();
   const stamp =
@@ -209,7 +213,7 @@ function downloadCsv() {
     String(d.getDate()).padStart(2, "0");
   const a = document.createElement("a");
   a.href = url;
-  a.download = `면세점_가격비교_${stamp}.csv`;
+  a.download = `면세점_가격비교_${stamp}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();
