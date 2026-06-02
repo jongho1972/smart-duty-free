@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,6 +22,25 @@ from . import clients
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _load_dotenv() -> None:
+    """smart_duty_free/.env 가 있으면 환경변수로 로드(이미 설정된 값은 보존).
+
+    VPS에서는 docker 환경변수가 우선하고, 로컬 개발에서는 .env 를 쓴다.
+    """
+    env_path = BASE_DIR.parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        os.environ.setdefault(key.strip(), val.strip())
+
+
+_load_dotenv()
 
 DEFAULT_RATE = 1500.0  # 환율 미확보 시 KRW 환산 추정용 기본값
 
@@ -91,8 +111,11 @@ async def compare(brand: str, product: str) -> dict:
     if not keyword:
         return {"error": "브랜드명 또는 상품명을 입력해 주세요."}
 
+    # 롯데 회원가/할인율은 로그인해야 노출 → 세션 쿠키 확보(자격증명 없으면 None)
+    lotte_cookies = await clients.ensure_lotte_login()
+
     # 롯데/신라는 동기(curl_cffi) → 스레드, 신세계는 async(Playwright)
-    lotte_t = asyncio.to_thread(clients.fetch_lotte, keyword)
+    lotte_t = asyncio.to_thread(clients.fetch_lotte, keyword, lotte_cookies)
     shilla_t = asyncio.to_thread(clients.fetch_shilla, keyword)
     ssg_t = clients.fetch_ssg_async(keyword)
     lotte_r, shilla_r, ssg_r = await asyncio.gather(

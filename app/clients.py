@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import time
 from dataclasses import dataclass, asdict
@@ -130,9 +131,81 @@ def _num(s: str) -> Optional[float]:
         return None
 
 
-def fetch_lotte(keyword: str) -> list[Product]:
+# --- 롯데 로그인(회원가/할인율은 로그인해야 노출됨) -------------------------
+# L.POINT 통합회원 로그인은 비밀번호를 클라이언트(KISA SEED 등)에서 암호화하므로
+# raw HTTP 복제가 어렵다 → Playwright로 로그인해 세션 쿠키를 수확하고,
+# 가벼운 curl_cffi 검색에 그 쿠키를 재사용한다(신세계 WAF 쿠키 패턴의 확장).
+LOTTE_LOGIN_URL = "https://kor.lps.lottedfs.com/kr/member/login"
+LOTTE_COOKIE_TTL = 30 * 60  # 30분
+
+_lotte_cookies: Optional[dict] = None
+_lotte_cookies_at: float = 0.0
+_lotte_lock = asyncio.Lock()
+
+
+async def _do_lotte_login() -> Optional[dict]:
+    """L.POINT 로그인 후 lottedfs.com 세션 쿠키 수확.
+
+    메모리 절약을 위해 신세계용 Chromium(_ssg_browser)을 공유하고, 로그인은
+    격리된 새 컨텍스트에서 수행한 뒤 컨텍스트만 닫는다(별도 프로세스 미기동).
+    """
+    lid, lpw = os.getenv("LOTTE_ID"), os.getenv("LOTTE_PW")
+    if not lid or not lpw:
+        return None
+    await _ssg_browser._ensure()  # 공유 Chromium 보장
+    ctx = await _ssg_browser._browser.new_context(
+        user_agent=UA, locale="ko-KR", viewport={"width": 1366, "height": 900})
+    try:
+        await ctx.add_init_script(
+            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
+        page = await ctx.new_page()
+        await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+        await page.fill("#loginLpId", lid)
+        await page.fill("#password", lpw)
+        try:
+            async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
+                await page.evaluate("() => doLpointLogin('N')")
+        except Exception:
+            await page.wait_for_timeout(3000)  # 페이지 내 처리(비이동)일 수 있음
+        cookies = await ctx.cookies()
+        jar = {c["name"]: c["value"] for c in cookies
+               if "lottedfs.com" in (c.get("domain") or "")}
+        return jar or None
+    finally:
+        await ctx.close()
+
+
+async def ensure_lotte_login() -> Optional[dict]:
+    """유효한 롯데 세션 쿠키를 반환(필요 시 로그인). 자격증명 없으면 None."""
+    global _lotte_cookies, _lotte_cookies_at
+    if not os.getenv("LOTTE_ID") or not os.getenv("LOTTE_PW"):
+        return None
+    now = time.monotonic()
+    if _lotte_cookies and (now - _lotte_cookies_at) < LOTTE_COOKIE_TTL:
+        return _lotte_cookies
+    async with _lotte_lock:
+        now = time.monotonic()
+        if _lotte_cookies and (now - _lotte_cookies_at) < LOTTE_COOKIE_TTL:
+            return _lotte_cookies
+        try:
+            jar = await _do_lotte_login()
+        except Exception:
+            jar = None
+        if jar:
+            _lotte_cookies, _lotte_cookies_at = jar, time.monotonic()
+        return _lotte_cookies
+
+
+def invalidate_lotte_login() -> None:
+    """쿠키 만료(로그인 풀림) 감지 시 다음 호출에서 재로그인하도록 캐시 비움."""
+    global _lotte_cookies, _lotte_cookies_at
+    _lotte_cookies, _lotte_cookies_at = None, 0.0
+
+
+def fetch_lotte(keyword: str, cookies: Optional[dict] = None) -> list[Product]:
     url = LOTTE_SEARCH.format(kw=creq.utils.quote(keyword))
-    r = creq.get(url, headers={"User-Agent": UA}, impersonate="chrome", timeout=TIMEOUT)
+    r = creq.get(url, headers={"User-Agent": UA}, impersonate="chrome",
+                 timeout=TIMEOUT, cookies=cookies or None)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
     out: list[Product] = []
