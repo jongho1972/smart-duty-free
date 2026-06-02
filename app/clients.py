@@ -55,60 +55,109 @@ def _tokens(s: str) -> list[str]:
     return [t for t in (_norm(x) for x in re.split(r"[\s/]+", s or "")) if t]
 
 
-def _evaluate(brand_tokens, prod_tokens, text) -> tuple[bool, int]:
-    """후보 텍스트에 대한 (유효여부, 점수) 계산.
+# 면세점은 영문 브랜드를 한글 표기로 인덱싱한다(RAYBAN→레이밴). 입력 브랜드(영문)와
+# 결과 브랜드(한글)의 교차언어 일치를 잡으려면 동의어 사전이 필요하다.
+# DF3/아이웨어·명품 중심으로 관리하며, 새 브랜드는 여기 추가한다.
+BRAND_ALIASES = {
+    "VEDIVERO": ("베디베로",),
+    "HUNTER": ("헌터",),
+    "ANNASUI": ("안나수이",),
+    "ASUI": ("안나수이",),
+    "JSTUART": ("질스튜어트",),
+    "CARIN": ("카린",),
+    "RAYBAN": ("레이밴", "레이반"),
+    "TUMI": ("투미",),
+    "CK": ("캘빈클라인", "씨케이"),
+    "CALVINKLEIN": ("캘빈클라인",),
+    "SWAROVSKI": ("스와로브스키",),
+    "PANDORA": ("판도라",),
+    "LAPIZSENSIBLE": ("라피즈", "라피즈센서블"),
+    "GUCCI": ("구찌",),
+    "LOEWE": ("로에베",),
+    "DIOR": ("디올",),
+    "OMEGA": ("오메가",),
+    "TIFFANY": ("티파니",),
+    "MONTBLANC": ("몽블랑",),
+}
 
-    면세점마다 상품명 표기(모델코드 vs 한글 별칭)가 달라 오매칭이 생기므로,
-    아래 중 하나를 만족해야 '유효'한 매칭으로 본다.
-      · 브랜드 토큰이 하나라도 일치, 또는
-      · 강한 상품 토큰(모델코드 등 4자 이상)이 일치, 또는
-      · 상품 토큰이 2개 이상 일치
+# 브랜드명에 흔히 붙는 카테고리 접미사(검색·매칭에서 브랜드 본명만 남기려고 제거)
+_BRAND_SUFFIX = re.compile(r"\b(EYE|JEW|JEWE|JEWELRY|BAG|WATCH|SLG)\b", re.I)
+
+
+def _clean_brand(brand: str) -> str:
+    """브랜드 입력에서 (토산) 같은 괄호·카테고리 접미사·기호를 제거해 본명만 남긴다."""
+    b = re.sub(r"\([^)]*\)", " ", brand or "")   # (토산) 등 괄호 주석 제거
+    b = _BRAND_SUFFIX.sub(" ", b)
+    b = re.sub(r"[^A-Za-z0-9가-힣 ]", " ", b)     # 점·하이픈 등 → 공백
+    return " ".join(b.split())
+
+
+def _brand_forms(brand: str) -> tuple[set, set]:
+    """입력 브랜드의 (영문 토큰, 한글 표기) 집합을 _norm 형태로 반환.
+
+    한글 표기는 동의어 사전 + 입력에 이미 한글이 있으면 그 토큰을 합친다.
     """
-    nt = _norm(text)
-    b = sum(1 for t in brand_tokens if t in nt)
-    pm = [t for t in prod_tokens if t in nt]
-    strong = any(len(t) >= 4 for t in pm)
-    valid = (b > 0) or strong or (len(pm) >= 2)
-    score = b + 2 * len(pm) + (3 if strong else 0)
-    return valid, score
+    cleaned = _clean_brand(brand)
+    eng = {t for t in _tokens(cleaned) if not re.search(r"[가-힣]", t)}
+    hangul = {t for t in _tokens(cleaned) if re.search(r"[가-힣]", t)}
+    key = _norm(cleaned)
+    for k, vals in BRAND_ALIASES.items():
+        if key and key == k:
+            hangul.update(_norm(v) for v in vals)
+    return eng, hangul
 
 
 def best_match(products: list[Product], brand: str, product: str,
                keyword: str = "") -> Optional[Product]:
-    """브랜드+상품 기준으로 가장 잘 맞는 상품 1개 선택(오매칭 방지).
+    """브랜드+상품 기준으로 가장 잘 맞는 상품 1개 선택(정밀도 우선).
 
-    keyword 가 모델코드(영숫자 4자+)이면 검색 결과가 이미 동일 모델군으로
-    좁혀진 것으로 보고, 색상 등 상품 토큰 일치로 변형만 고른다(롯데처럼
-    상품명에 모델코드가 안 들어가는 경우 대응). 그 외(한글 별칭 등)에는
-    엄격 검증으로 타 카테고리 오매칭을 막는다.
+    면세점마다 취급 품목이 달라 '해당 모델 미보유'가 흔하고, 그때 사이트는
+    부분일치로 무관한 상품을 잔뜩 반환한다. 그래서 확실할 때만 채택하고
+    아니면 None('조회 안 됨')을 돌려준다. 후보 1건의 채택 조건:
+      · 상품의 모델코드(숫자 포함 4자+)가 상품명에 그대로 등장 → 채택, 또는
+      · 브랜드가 (동의어 포함) 일치하고 식별 상품 토큰이 잡힘 → 채택
+    모델코드로 검색했는데 결과가 폭발(부분일치)하면, 'BR'·'50' 같은 2자
+    우연 일치만으로는 채택하지 않고 3자+ 토큰이나 강한 토큰을 요구한다.
     """
     if not products:
         return None
-    bt, pt = _tokens(brand), _tokens(product)
-    kw_is_model = bool(re.fullmatch(r"[A-Za-z0-9]{4,}", keyword or ""))
+    eng_brand, hangul_brand = _brand_forms(brand)
+    # 상품 식별 토큰: 브랜드 토큰(영문·한글)은 제외(브랜드명이 상품명에도 들어가면 오인됨)
+    brand_words = eng_brand | hangul_brand
+    pt = [t for t in _tokens(product) if t not in brand_words]
+    model_tokens = [t for t in pt
+                    if len(t) >= 4 and any(ch.isdigit() for ch in t)]
+    kw_is_model = bool(re.fullmatch(r"[A-Za-z0-9]+", keyword or "")) \
+        and len(keyword) >= 4 and any(c.isdigit() for c in keyword)
+    # 모델코드 검색인데 결과가 많으면(>=25) 부분일치 폭발 → 약한 토큰 불신
+    flooded = kw_is_model and len(products) >= 25
 
     scored = []
     for p in products:
-        text = f"{p.brand} {p.name}"
-        nt = _norm(text)
-        b = sum(1 for t in bt if t in nt)
+        nt = _norm(f"{p.brand} {p.name}")
+        brand_hit = any(a in nt for a in (eng_brand | hangul_brand))
         pm = [t for t in pt if t in nt]
         strong = any(len(t) >= 4 for t in pm)
-        if kw_is_model:
-            valid = True  # 검색이 모델군으로 이미 좁힘 → 변형만 고른다
+        ident = [t for t in pm if len(t) >= 3]       # 우연 일치에 강한 토큰
+        model_hit = any(m in nt for m in model_tokens)
+
+        if model_hit:
+            valid = True                              # 모델코드 직접 등장 = 확실
+        elif brand_hit:
+            if flooded:
+                valid = strong or len(ident) >= 1     # 약한 2자 우연 일치 배제
+            else:
+                valid = len(pm) >= 1 or strong
         else:
-            valid = (b > 0) or strong or (len(pm) >= 2)
-        score = b + 2 * len(pm) + (3 if strong else 0)
+            valid = False                             # 브랜드·모델 모두 불일치 → 컷
+
+        score = ((5 if model_hit else 0) + (3 if brand_hit else 0)
+                 + 2 * len(pm) + (2 if strong else 0))
         scored.append((valid, score, not p.soldout, p))
 
     scored.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
     valid, score, _, top = scored[0]
-    if not valid:
-        return None
-    # 모델코드 검색은 결과를 신뢰하므로 점수 0이어도 첫 변형 채택
-    if not kw_is_model and score == 0:
-        return None
-    return top
+    return top if valid else None
 
 
 # ---------------------------------------------------------------------------

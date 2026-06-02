@@ -57,7 +57,7 @@ batchForm.addEventListener("submit", async (e) => {
       </table>
     </div>
     <p class="note">· 상품명·브랜드명은 입력값 그대로이며, <b>면세가</b>는 정가(USD) 대표값입니다.<br/>
-    · <b>엑셀 다운로드</b> 시 각 면세점 할인률 셀에 상품 페이지 하이퍼링크가 포함됩니다.</p>`;
+    · <b>엑셀 다운로드</b> 시 할인률과 별도로 면세점별 <b>가격확인 링크</b> 컬럼이 포함됩니다.</p>`;
   const tbody = results.querySelector("#compare-body");
   const excelBtn = results.querySelector("#excel-btn");
   excelBtn.addEventListener("click", downloadExcel);
@@ -164,7 +164,7 @@ function faceValue(shops) {
   return null;
 }
 
-// 조회 결과 1건 → 엑셀용 구조화 행(면세점별 할인률+상품 링크).
+// 조회 결과 1건 → 엑셀용 구조화 행(면세점별 할인률 + 가격확인 링크, 별도 컬럼).
 function extractExportRow(data, row) {
   const shops = (data && data.shops) || {};
   const errors = (data && data.errors) || {};
@@ -185,7 +185,7 @@ function extractExportRow(data, row) {
   };
 }
 
-// 서버에서 .xlsx 생성(각 할인률 셀에 클릭 가능한 하이퍼링크) → 다운로드
+// 서버에서 .xlsx 생성(할인률과 분리된 면세점별 '가격확인 링크' 컬럼) → 다운로드
 async function downloadExcel() {
   if (!exportRows.length) return;
   let blob;

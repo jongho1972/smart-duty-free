@@ -86,16 +86,21 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 def choose_keyword(brand: str, product: str) -> str:
     """검색에 가장 효과적인 키워드 선택.
 
-    상품명에서 가장 긴 영숫자 토큰(모델코드, 예: VVCC25)을 우선 사용한다.
-    색상코드(BR 등)만 단독으로 쓰면 결과가 과도하므로 모델코드를 쓴다.
+    1순위: 상품명의 모델코드(숫자를 포함한 영숫자 4자+, 예 VVCC25/0RB3447001).
+           면세점이 그 모델을 보유하면 정확히 좁혀지고, 미보유면 best_match가 거른다.
+    2순위: 모델코드가 없으면 상품명의 가장 긴 토큰(GUSSETED·CRESCENT 등 고유 단어).
+           브랜드명보다 고유 단어로 검색해야 원하는 상품이 결과에 직접 들어온다.
+           무관 브랜드가 섞여도 best_match가 브랜드 불일치로 거른다.
+    3순위: 상품 토큰이 없으면 브랜드명.
     """
     tokens = re.findall(r"[A-Za-z0-9]+", product or "")
-    tokens = [t for t in tokens if len(t) >= 3]
-    if tokens:
-        return max(tokens, key=len)
-    if (product or "").strip():
-        return product.strip()
-    return (brand or "").strip()
+    models = [t for t in tokens if len(t) >= 4 and any(c.isdigit() for c in t)]
+    if models:
+        return max(models, key=len)
+    longish = [t for t in tokens if len(t) >= 3]
+    if longish:
+        return max(longish, key=len)
+    return clients._clean_brand(brand) or (product or "").strip() or (brand or "").strip()
 
 
 def _result_block(shop: str, p) -> dict:
@@ -188,13 +193,18 @@ async def api_compare(
     return JSONResponse(await compare(brand.strip(), product.strip()))
 
 
-EXPORT_HEADERS = ["상품명", "브랜드명", "면세가", "신라 할인률", "롯데 할인률", "신세계 할인률"]
+EXPORT_HEADERS = [
+    "상품명", "브랜드명", "면세가",
+    "신라 할인률", "롯데 할인률", "신세계 할인률",
+    "신라 링크", "롯데 링크", "신세계 링크",
+]
 EXPORT_SHOPS = ["신라", "롯데", "신세계"]
 
 
 @app.post("/api/export")
 async def api_export(request: Request, payload: dict = Body(default={})):
-    """결과를 .xlsx로 생성(각 면세점 할인률 셀에 상품 페이지 하이퍼링크 포함)."""
+    """결과를 .xlsx로 생성. 웹 표와 동일하게 할인률과 '가격확인 링크'를
+    별도 컬럼으로 구분한다(엑셀은 셀당 하이퍼링크 1개 제약 → 면세점별 링크 컬럼)."""
     if request.cookies.get(AUTH_COOKIE) != AUTH_TOKEN:
         return JSONResponse({"error": "auth_required"}, status_code=401)
 
@@ -214,18 +224,25 @@ async def api_export(request: Request, payload: dict = Body(default={})):
 
     for r in rows:
         shops = (r or {}).get("shops") or {}
-        ws.append([r.get("product", ""), r.get("brand", ""), r.get("face", ""), "", "", ""])
+        ws.append([r.get("product", ""), r.get("brand", ""), r.get("face", ""),
+                   "", "", "", "", "", ""])
         rownum = ws.max_row
         for i, s in enumerate(EXPORT_SHOPS):
-            cell = ws.cell(row=rownum, column=4 + i)
             sh = shops.get(s) or {}
-            cell.value = sh.get("rate") or "—"
+            # 할인률(숫자만, 링크 없음)
+            rate_cell = ws.cell(row=rownum, column=4 + i)
+            rate_cell.value = sh.get("rate") or "—"
+            # 가격확인 링크(별도 컬럼) — '바로가기' 텍스트에 하이퍼링크
+            link_cell = ws.cell(row=rownum, column=7 + i)
             url = sh.get("url")
             if url:
-                cell.hyperlink = url
-                cell.font = link_font
+                link_cell.value = "바로가기"
+                link_cell.hyperlink = url
+                link_cell.font = link_font
+            else:
+                link_cell.value = "—"
 
-    for col, width in zip("ABCDEF", (30, 20, 10, 13, 13, 13)):
+    for col, width in zip("ABCDEFGHI", (30, 20, 10, 11, 11, 11, 11, 11, 11)):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = "A2"
 
