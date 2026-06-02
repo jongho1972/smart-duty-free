@@ -10,6 +10,12 @@
   --slate-200: #CBD5E1;
   --slate-100: #E5EAF0;
   --line: #E5EAF0;
+
+  /* 타입 스케일(모듈러) — 컴포넌트는 토큰만 참조 */
+  --fs-caption: 0.8rem;   /* 라벨·힌트·note·footer */
+  --fs-body:    0.9rem;   /* 표 헤더 */
+  --fs-data:    0.95rem;  /* 표 본문 전 컬럼 통일 */
+  --fs-lead:    1rem;     /* 입력 버튼 */
 }
 
 * { box-sizing: border-box; }
@@ -87,7 +93,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 18px 20px 20px; }
   position: relative;
   justify-self: start;
   font-weight: 700;
-  font-size: .95rem;
+  font-size: var(--fs-lead);
   color: #fff;
   background: var(--navy-900);
   border: none;
@@ -109,13 +115,13 @@ main { max-width: 1120px; margin: 0 auto; padding: 18px 20px 20px; }
 }
 .batch-progress {
   color: var(--navy-900);
-  font-size: .9rem;
+  font-size: var(--fs-body);
   font-weight: 700;
 }
 .batch-progress[hidden] { display: none; }
 .field { display: flex; flex-direction: column; gap: 7px; }
 .field label {
-  font-size: .8rem;
+  font-size: var(--fs-caption);
   font-weight: 700;
   color: var(--slate-700);
 }
@@ -134,7 +140,7 @@ body.loading .spinner { display: block; }
 body.loading .btn-label { visibility: hidden; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.hint { color: var(--slate-500); font-size: .85rem; margin: 16px 4px 0; }
+.hint { color: var(--slate-500); font-size: var(--fs-caption); margin: 16px 4px 0; }
 
 /* ---------- results ---------- */
 /* 상품명 줄바꿈 방지로 표가 넓어질 수 있어, 결과 영역은 본문(1120px)보다
@@ -155,7 +161,7 @@ body.loading .btn-label { visibility: hidden; }
 #excel-btn {
   font-family: inherit;
   font-weight: 700;
-  font-size: .85rem;
+  font-size: var(--fs-caption);
   color: var(--navy-900);
   background: #fff;
   border: 1.5px solid var(--slate-200);
@@ -174,15 +180,23 @@ body.loading .btn-label { visibility: hidden; }
   background: #fff;
 }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 14px 16px; text-align: left; font-size: .95rem; }
+th, td { padding: 14px 16px; text-align: left; font-size: var(--fs-data); }
 thead th {
   background: var(--blue-025);
   color: var(--navy-900);
   font-weight: 700;
-  font-size: .82rem;
+  font-size: var(--fs-body);
   letter-spacing: -.01em;
   border-bottom: 1px solid var(--slate-100);
   white-space: nowrap;
+}
+
+/* 숫자 컬럼(면세가 + 신라·롯데·신세계 할인률 = 3~6번째)은 우측 정렬 + 자릿수 정렬 */
+.compare-table th:nth-child(n+3):nth-child(-n+6),
+.compare-table td[data-label="면세가"],
+.compare-table td[data-label$="할인률"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 tbody tr { border-bottom: 1px solid var(--slate-100); }
 tbody tr:last-child { border-bottom: none; }
@@ -191,10 +205,11 @@ tbody tr:last-child { border-bottom: none; }
 /* 상품명·브랜드명은 줄바꿈 없이 한 줄(필요 시 표가 가로 스크롤) */
 .compare-table td[data-label="상품명"] { font-weight: 700; white-space: nowrap; color: var(--navy-900); }
 .compare-table td[data-label="브랜드명"] { color: var(--slate-500); white-space: nowrap; }
+.compare-table td[data-label="면세가"] { font-weight: 600; color: var(--slate-700); }
 
+/* 크기는 다른 셀과 통일하고, 강조는 굵기·색으로만 (한 행 내 폰트 크기 일관) */
 .rate {
-  font-weight: 700;
-  font-size: 1.02rem;
+  font-weight: 800;
   color: var(--navy-900);
 }
 
@@ -202,7 +217,7 @@ tbody tr:last-child { border-bottom: none; }
 .link-cell { white-space: nowrap; }
 .shop-link {
   font-weight: 600;
-  font-size: .9rem;
+  font-size: var(--fs-data);
   color: var(--blue-500);
   text-decoration: none;
   border-bottom: 1.5px solid transparent;
@@ -214,7 +229,7 @@ tbody tr:last-child { border-bottom: none; }
 
 .na { color: var(--slate-400); }
 
-.note { color: var(--slate-500); font-size: .82rem; margin: 14px 4px 0; }
+.note { color: var(--slate-500); font-size: var(--fs-caption); margin: 14px 4px 0; }
 
 /* ---------- footer (항공편수·출국객수 페이지와 동일 footnote 구조) ---------- */
 footer.footnote {
@@ -222,7 +237,7 @@ footer.footnote {
   margin: 48px auto 0;
   padding: 16px 20px 44px;
   border-top: 1px solid var(--slate-100);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--slate-500);
   line-height: 1.7;
   letter-spacing: -0.005em;
@@ -231,7 +246,7 @@ footer.footnote .footnote-block + .footnote-block { margin-top: 16px; }
 footer.footnote .footnote-title {
   font-weight: 600;
   color: var(--slate-700);
-  font-size: 12px;
+  font-size: 0.75rem;
   margin-bottom: 6px;
 }
 footer.footnote ul { margin: 0; padding-left: 16px; }
@@ -242,7 +257,7 @@ footer.footnote .credit {
   padding-top: 14px;
   border-top: 1px solid var(--slate-100);
   color: var(--slate-400);
-  font-size: 11px;
+  font-size: 0.7rem;
   text-align: center;
   letter-spacing: 0.02em;
 }
