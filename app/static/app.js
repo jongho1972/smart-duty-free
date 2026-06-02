@@ -121,12 +121,8 @@ function buildProductRow(data, row) {
   const shops = data.shops || {};
   const errors = data.errors || {};
 
-  // 면세가(대표 정가, 신라 우선)
-  let faceUsd = null;
-  for (const s of SHOP_ORDER) {
-    const r = shops[s];
-    if (r && r.found && r.price_origin != null) { faceUsd = r.price_origin; break; }
-  }
+  // 면세가: 정가 우선, 없으면 판매가 폴백(할인 없는 상품 대응)
+  const faceUsd = faceValue(shops);
 
   const rateCell = (shop) => {
     const r = shops[shop];
@@ -154,15 +150,25 @@ function buildProductRow(data, row) {
     </tr>`;
 }
 
+// 면세가 대표값: 정가(price_origin) 우선, 없으면 판매가(price_sale)로 폴백.
+// 할인 없는 상품은 정가가 비고 판매가만 오므로, 폴백이 없으면 가격이 있어도 "—"로 보인다.
+function faceValue(shops) {
+  for (const s of SHOP_ORDER) {
+    const r = shops[s];
+    if (r && r.found && r.price_origin != null) return r.price_origin;
+  }
+  for (const s of SHOP_ORDER) {
+    const r = shops[s];
+    if (r && r.found && r.price_sale != null) return r.price_sale;
+  }
+  return null;
+}
+
 // 조회 결과 1건 → CSV 한 행(표와 동일 7컬럼). 링크는 "면세점 URL" 형태.
 function extractCsvRow(data, row) {
   const shops = (data && data.shops) || {};
   const errors = (data && data.errors) || {};
-  let faceUsd = null;
-  for (const s of SHOP_ORDER) {
-    const r = shops[s];
-    if (r && r.found && r.price_origin != null) { faceUsd = r.price_origin; break; }
-  }
+  const faceUsd = faceValue(shops);
   const rateOf = (s) => {
     const r = shops[s];
     if (!r || !r.found) return errors[s] ? "실패" : "";
