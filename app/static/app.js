@@ -7,6 +7,10 @@ const batchInput = document.getElementById("batch-input");
 const batchBtn = document.getElementById("batch-btn");
 const MAX_BATCH_ROWS = 20;
 
+// CSV 다운로드용 누적 데이터 (표와 동일한 7개 컬럼)
+const CSV_HEADER = ["상품명", "브랜드명", "면세가", "신라 할인률", "롯데 할인률", "신세계 할인률", "가격확인 링크"];
+let csvRows = [];
+
 // 일괄 입력 파싱: 한 줄 = "모델코드〈Tab 또는 2칸+ 공백〉브랜드"
 function parseBatch(raw) {
   return (raw || "")
@@ -37,30 +41,34 @@ batchForm.addEventListener("submit", async (e) => {
 
   setBatchLoading(true);
   results.hidden = false;
+  csvRows = [];
   results.innerHTML = `
+    <div class="results-toolbar">
+      <button type="button" id="csv-btn" disabled>CSV 다운로드</button>
+    </div>
     <div class="table-wrap">
       <table class="compare-table">
         <thead>
           <tr>
             <th>상품명</th><th>브랜드명</th><th>면세가</th>
-            <th>신라 할인률</th><th>롯데 할인률</th><th>신세계 할인률</th><th>가격확인</th>
+            <th>신라 할인률</th><th>롯데 할인률</th><th>신세계 할인률</th><th>가격확인 링크</th>
           </tr>
         </thead>
         <tbody id="compare-body"></tbody>
       </table>
     </div>
-    <p class="note">· 상품명·브랜드명은 입력값 그대로이며, <b>면세가</b>는 정가(USD) 대표값입니다.<br/>
-    · 가격·할인율은 조회 시점의 각 인터넷면세점 공개 정보 기준입니다.</p>`;
+    <p class="note">· 상품명·브랜드명은 입력값 그대로이며, <b>면세가</b>는 정가(USD) 대표값입니다.</p>`;
   const tbody = results.querySelector("#compare-body");
-  const prog = document.createElement("div");
-  prog.className = "batch-progress";
-  results.appendChild(prog);
+  const csvBtn = results.querySelector("#csv-btn");
+  csvBtn.addEventListener("click", downloadCsv);
+  const prog = document.getElementById("batch-progress");
+  prog.hidden = false;
 
   try {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       prog.textContent = `조회 중… (${i + 1}/${rows.length}) ${row.raw}`;
-      let tr;
+      let tr, data = {};
       try {
         const params = new URLSearchParams({ brand: row.brand, product: row.product });
         const res = await fetch(`/api/compare?${params.toString()}`);
@@ -68,15 +76,19 @@ batchForm.addEventListener("submit", async (e) => {
           if (window.__showAuthGate) window.__showAuthGate();
           return;
         }
-        const data = await res.json();
+        data = await res.json();
         tr = buildProductRow(data, row);
       } catch (err) {
+        data = {};
         tr = buildErrorRow(row);
       }
       tbody.insertAdjacentHTML("beforeend", tr);
+      csvRows.push(extractCsvRow(data, row));
     }
   } finally {
-    prog.remove();
+    prog.hidden = true;
+    prog.textContent = "";
+    csvBtn.disabled = csvRows.length === 0;
     setBatchLoading(false);
   }
 
@@ -176,6 +188,62 @@ function buildProductRow(data, row) {
       ${rateCell("신세계")}
       <td data-label="가격확인" class="link-cell">${links || "—"}</td>
     </tr>`;
+}
+
+// 조회 결과 1건 → CSV 한 행(표와 동일 7컬럼). 링크는 "면세점 URL" 형태.
+function extractCsvRow(data, row) {
+  const shops = (data && data.shops) || {};
+  const errors = (data && data.errors) || {};
+  let faceUsd = null;
+  for (const s of SHOP_ORDER) {
+    const r = shops[s];
+    if (r && r.found && r.price_origin != null) { faceUsd = r.price_origin; break; }
+  }
+  const rateOf = (s) => {
+    const r = shops[s];
+    if (!r || !r.found) return errors[s] ? "실패" : "";
+    return r.discount_rate != null ? r.discount_rate + "%" : "";
+  };
+  const links = SHOP_ORDER
+    .filter((s) => shops[s] && shops[s].found && shops[s].url)
+    .map((s) => `${s} ${shops[s].url}`)
+    .join(" | ");
+  return [
+    row.product || row.raw || "",
+    row.brand || "",
+    faceUsd != null ? fmtUsd(faceUsd) : "",
+    rateOf("신라"), rateOf("롯데"), rateOf("신세계"),
+    links,
+  ];
+}
+
+// CSV 문자열 생성(엑셀 한글 호환 위해 UTF-8 BOM 부착)
+function buildCsv(header, dataRows) {
+  const esc = (s) => {
+    const v = String(s == null ? "" : s);
+    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  };
+  const lines = [header, ...dataRows].map((r) => r.map(esc).join(","));
+  return "﻿" + lines.join("\r\n");
+}
+
+function downloadCsv() {
+  if (!csvRows.length) return;
+  const csv = buildCsv(CSV_HEADER, csvRows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const d = new Date();
+  const stamp =
+    d.getFullYear() +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `면세점_가격비교_${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // 조회 실패/미발견 행: 컬럼 형태는 유지하고 값만 "—"

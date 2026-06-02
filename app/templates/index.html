@@ -7,7 +7,8 @@
   <meta name="description" content="신라·롯데·신세계 인터넷면세점 동일 상품 할인율·가격 비교" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <link rel="stylesheet" href="/static/style.css?v={{ v }}" />
   <style id="auth-gate"></style>
   <script src="/static/auth.js?v={{ v }}"></script>
@@ -24,15 +25,32 @@
     <form id="batch-form" class="batch-card" autocomplete="off">
       <div class="field">
         <div class="batch-label-row">
-          <label for="batch-input">상품 목록 · 한 줄에 하나씩 (모델코드〈Tab〉브랜드)</label>
+          <label for="batch-input">상품 목록 · 한 줄에 하나씩 (상품명〈Tab〉브랜드명)</label>
           <button type="button" class="paste-btn" data-target="batch-input" title="클립보드에서 붙여넣기" aria-label="목록 붙여넣기">붙여넣기</button>
         </div>
-        <textarea id="batch-input" rows="6" placeholder="예)&#10;VVCC25/BR    VEDI VERO EYE(토산)&#10;HTB12/GRY    HUNTER EYE&#10;AS1178 001    A.SUI EYE (토산)"></textarea>
+        <textarea id="batch-input" rows="10" placeholder="예)&#10;VVCC25/BR    VEDI VERO EYE(토산)&#10;HTB12/GRY    HUNTER EYE&#10;AS1178 001    A.SUI EYE (토산)">VVCC25/BR	VEDI VERO EYE(토산)
+HTB12/GRY	HUNTER EYE
+AS1178 001	A.SUI EYE (토산)
+JS58033Z C01	J.STUART EYE
+CONNIE C1	CARIN EYE(토산)
+HB_CE-C6-OB	LAPIZ SENSIBLE EYE
+0RB3447001 50	RAYBAN EYE
+TUMI SLG GUSSETED CARD CASE	TUMI
+CK LLG SOFT CRESCENT 30	CK BAG
+Crystalline wonder Watch	SWAROVSKI JEW
+SWAROVSK JEWE MILLENIA BRACELET CRY DTLI	SWAROVSKI JEW
+PANDORA JEWE Silver BRACELET	PANDORA JEW
+PANDORA JEWE Silver CHARM	PANDORA JEW
+SO29B706	SWATCH WATCH
+G -SHOCK(MEN)	G SHOCK WATCH</textarea>
       </div>
-      <button type="submit" id="batch-btn">
-        <span class="btn-label">전체 비교</span>
-        <span class="spinner" aria-hidden="true"></span>
-      </button>
+      <div class="batch-actions">
+        <button type="submit" id="batch-btn">
+          <span class="btn-label">전체 비교</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+        <span class="batch-progress" id="batch-progress" role="status" aria-live="polite" hidden></span>
+      </div>
     </form>
 
     <p class="hint" id="hint">실시간으로 3개 면세점을 조회합니다 · 신세계는 보안 검증 때문에 첫 조회가 다소 느릴 수 있어요.</p>
@@ -40,9 +58,21 @@
     <section id="results" class="results" hidden></section>
   </main>
 
-  <footer>
-    <p>가격·할인율은 조회 시점의 각 인터넷면세점 공개 정보 기준이며, 회원등급·쿠폰·환율에 따라 실구매가가 달라질 수 있습니다.</p>
-    <p class="muted">Smart Duty Free · 개인 참고용 비공식 도구</p>
+  <footer class="footnote">
+    <div class="footnote-block">
+      <div class="footnote-title">데이터 출처</div>
+      <ul>
+        <li>신라 · 롯데 · 신세계 인터넷면세점 공개 상품 정보 (조회 시점 기준)</li>
+      </ul>
+    </div>
+    <div class="footnote-block">
+      <div class="footnote-title">유의 사항</div>
+      <ul>
+        <li>가격·할인율은 회원등급·쿠폰·환율에 따라 실구매가가 달라질 수 있습니다.</li>
+        <li>면세가는 정가(USD) 대표값이며, 면세점별 표기·환율에 따라 차이가 있을 수 있습니다.</li>
+      </ul>
+    </div>
+    <div class="credit">Built with Claude Code by 신라면세점 인천공항점(마케팅)</div>
   </footer>
 
   <script src="/static/app.js?v={{ v }}"></script>

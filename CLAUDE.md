@@ -22,11 +22,16 @@ python -m uvicorn app.main:app --reload --port 8077
 
 | 파일 | 역할 |
 |------|------|
-| `app/main.py` | FastAPI 서버, `/api/compare?brand=&product=`, 3사 동시 조회·KRW 환산·최저가 판정 |
+| `app/main.py` | FastAPI 서버, `/api/compare?brand=&product=`, 3사 동시 조회·KRW 환산·정적 자산 캐시버스팅(`?v=mtime`) |
 | `app/clients.py` | 3사 조회 클라이언트 + 상품 매칭 로직 |
-| `app/templates/index.html` | 단일 페이지 UI |
-| `app/static/style.css` | 신라 BI(크림슨 `#8C0023` + 골드 `#B8922A`) 톤 디자인 |
-| `app/static/app.js` | 검색 폼 → API 호출 → 표 렌더 |
+| `app/templates/index.html` | 단일 페이지 UI (일괄 입력 textarea, 기본값 프리셋) |
+| `app/static/style.css` | 항공편수·출국객수 대시보드와 동일 톤(네이비 `#0B2E5C` + 슬레이트 + Pretendard, footnote 푸터) |
+| `app/static/app.js` | 일괄 입력 파싱 → 순차 조회 → 상품별 1행 표 렌더 + CSV 다운로드 |
+
+### UI 동작 (공기관 제출용 심플 양식)
+- **일괄 비교 전용**: 한 줄=`상품명〈Tab〉브랜드명`, 순차 조회(신세계 Playwright 탓 건당 6~8초), 최대 20건, 진행표시는 "전체 비교" 버튼 옆
+- **결과 표**: `상품명·브랜드명·면세가·신라/롯데/신세계 할인률·가격확인 링크` 7컬럼. 상품명·브랜드명은 입력값 그대로(줄바꿈 없음), 뱃지 없음
+- **CSV 다운로드**: 결과를 UTF-8 BOM csv로 (`면세점_가격비교_YYYYMMDD.csv`)
 
 ## 사이트별 조회 방식 (중요)
 
