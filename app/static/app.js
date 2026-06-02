@@ -102,42 +102,6 @@ function setBatchLoading(on) {
   batchBtn.disabled = on;
 }
 
-// --- 클립보드 붙여넣기 버튼 ---
-document.querySelectorAll(".paste-btn").forEach((btn) => {
-  btn.addEventListener("click", async () => {
-    const input = document.getElementById(btn.dataset.target);
-    if (!input) return;
-    try {
-      if (!navigator.clipboard || !navigator.clipboard.readText) {
-        throw new Error("clipboard-unavailable");
-      }
-      const text = (await navigator.clipboard.readText()).trim();
-      if (!text) {
-        flashHint("클립보드가 비어 있습니다.");
-        input.focus();
-        return;
-      }
-      input.value = text;
-      input.focus();
-      markPasted(btn);
-    } catch (err) {
-      // 권한 거부·구형 브라우저·비보안 컨텍스트 → 포커스 폴백
-      input.focus();
-      flashHint("자동 붙여넣기가 막혀 있어요. 입력칸에서 직접 붙여넣기(⌘V / Ctrl+V) 해 주세요.");
-    }
-  });
-});
-
-function markPasted(btn) {
-  const orig = btn.textContent;
-  btn.classList.add("done");
-  btn.textContent = "붙여넣음";
-  setTimeout(() => {
-    btn.classList.remove("done");
-    btn.textContent = orig;
-  }, 1300);
-}
-
 function flashHint(msg) {
   hint.textContent = msg;
   hint.style.color = "#99202a";
