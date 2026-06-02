@@ -39,7 +39,12 @@ python -m uvicorn app.main:app --reload --port 8077
 
 | 면세점 | 방식 | 핵심 |
 |--------|------|------|
-| **롯데** | 순수 HTTP GET (`curl_cffi`) | 검색 결과가 **서버 렌더링 HTML**. `kor.lottedfs.com/kr/search?comSearchWord=` → `ol#unitStyleList > li` 파싱. 상품 링크는 `onclick`의 `ga_adltCheckPrdDtlMove(prdNo,prdOptNo)`로 구성 |
+| **롯데** | **L.POINT 로그인(Playwright)** + HTTP GET (`curl_cffi`) | 검색 결과가 **서버 렌더링 HTML**. `kor.lottedfs.com/kr/search?comSearchWord=` → `ol#unitStyleList > li` 파싱. 상품 링크는 `onclick`의 `ga_adltCheckPrdDtlMove(prdNo,prdOptNo)`로 구성. **회원가/할인율은 로그인해야 노출**(비로그인은 "로그인 후 할인율 확인"+정가만) |
+
+### 롯데 로그인 (회원가 수집)
+- 비밀번호 클라이언트 암호화(KISA)로 raw HTTP 로그인 복제 불가 → **Playwright로 L.POINT 로그인**(`kor.lps.lottedfs.com/kr/member/login`, `#loginLpId`+`#password`→`doLpointLogin('N')`) 후 `lottedfs.com` 세션 쿠키 수확해 `fetch_lotte`의 `curl_cffi`에 재사용(30분 캐시, `ensure_lotte_login`).
+- **신세계용 Chromium(`_ssg_browser`) 공유** — 새 컨텍스트만 열어 로그인(메모리 900m 가드 내). 캡차 없음.
+- 자격증명은 **환경변수 `LOTTE_ID`/`LOTTE_PW`**: 로컬은 `.env`(gitignore), VPS는 `deploy/.env.dfprice`(docker `env_file`). 미설정 시 비로그인으로 graceful fallback.
 | **신라** | HTTP POST (`curl_cffi`) | `ajaxProducts`가 **JSON API**. 검색 페이지 GET으로 `CSRFToken`+쿠키 획득 후 POST. `userPrice.salePrice`(정가)/`discountPrice`(판매가)/`discountRate`, `code`로 링크 |
 | **신세계** | **Playwright 헤드리스** | WAF(`FECAS` httpOnly 쿠키)가 일반 HTTP를 **406/403 차단**. 쿠키는 발급 브라우저 TLS 지문에 묶여 재사용 불가. **직접 URL 진입도 차단**되므로, 홈(`/kr/main/initMain`)에서 검색 폼(`#search`)을 `submit()`해 결과로 이동해야 통과. 브라우저 컨텍스트는 캐시 재사용 |
 
