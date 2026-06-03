@@ -72,10 +72,6 @@ batchForm.addEventListener("submit", async (e) => {
       try {
         const params = new URLSearchParams({ brand: row.brand, product: row.product });
         const res = await fetch(`/api/compare?${params.toString()}`);
-        if (res.status === 401) {
-          if (window.__showAuthGate) window.__showAuthGate();
-          return;
-        }
         data = await res.json();
         tr = buildProductRow(data, row);
       } catch (err) {
@@ -195,10 +191,6 @@ async function downloadExcel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rows: exportRows }),
     });
-    if (res.status === 401) {
-      if (window.__showAuthGate) window.__showAuthGate();
-      return;
-    }
     if (!res.ok) throw new Error("export-failed");
     blob = await res.blob();
   } catch (err) {

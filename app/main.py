@@ -62,12 +62,6 @@ def _asset_version() -> str:
 
 ASSET_VERSION = _asset_version()
 
-# --- 비밀번호 게이트 (신라면세점 서브페이지와 동일 비번 0708) ---
-GATE_PASSWORD = "0708"
-AUTH_COOKIE = "sdf_auth"
-AUTH_TOKEN = "ok-0708"          # 인증 통과 표식(개인 도구 수준)
-AUTH_MAX_AGE = 60 * 60 * 12     # 12시간
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -170,26 +164,11 @@ async def compare(brand: str, product: str) -> dict:
     }
 
 
-@app.post("/api/verify")
-async def api_verify(payload: dict = Body(default={})):
-    """비밀번호 확인 → 통과 시 인증 쿠키 설정."""
-    if (payload or {}).get("password") == GATE_PASSWORD:
-        resp = JSONResponse({"ok": True})
-        resp.set_cookie(
-            AUTH_COOKIE, AUTH_TOKEN, max_age=AUTH_MAX_AGE,
-            httponly=True, samesite="lax", secure=True, path="/")
-        return resp
-    return JSONResponse({"ok": False}, status_code=401)
-
-
 @app.get("/api/compare")
 async def api_compare(
-    request: Request,
     brand: str = Query("", description="브랜드명"),
     product: str = Query("", description="상품명/모델"),
 ):
-    if request.cookies.get(AUTH_COOKIE) != AUTH_TOKEN:
-        return JSONResponse({"error": "auth_required"}, status_code=401)
     return JSONResponse(await compare(brand.strip(), product.strip()))
 
 
@@ -202,11 +181,9 @@ EXPORT_SHOPS = ["신라", "롯데", "신세계"]
 
 
 @app.post("/api/export")
-async def api_export(request: Request, payload: dict = Body(default={})):
+async def api_export(payload: dict = Body(default={})):
     """결과를 .xlsx로 생성. 웹 표와 동일하게 할인률과 '가격확인 링크'를
     별도 컬럼으로 구분한다(엑셀은 셀당 하이퍼링크 1개 제약 → 면세점별 링크 컬럼)."""
-    if request.cookies.get(AUTH_COOKIE) != AUTH_TOKEN:
-        return JSONResponse({"error": "auth_required"}, status_code=401)
 
     from io import BytesIO
     from openpyxl import Workbook
