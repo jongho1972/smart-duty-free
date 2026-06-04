@@ -261,6 +261,12 @@ footer.footnote .credit {
   text-align: center;
   letter-spacing: 0.02em;
 }
+footer.footnote a {
+  color: var(--blue-500);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+footer.footnote a:hover { color: var(--navy-900); }
 
 @media (max-width: 720px) {
   #batch-btn { width: 100%; justify-self: stretch; padding: 14px; }
