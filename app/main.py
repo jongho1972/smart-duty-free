@@ -241,3 +241,32 @@ async def index(request: Request):
 @app.get("/healthz")
 async def healthz():
     return {"ok": True}
+
+
+_ROBOTS_TXT = (
+    "User-agent: *\n"
+    "Allow: /\n"
+    "Disallow: /api/\n\n"
+    "Sitemap: https://dfprice.jhawk.kr/sitemap.xml\n"
+)
+
+_SITEMAP_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    "  <url>\n"
+    "    <loc>https://dfprice.jhawk.kr/</loc>\n"
+    "    <changefreq>weekly</changefreq>\n"
+    "    <priority>1.0</priority>\n"
+    "  </url>\n"
+    "</urlset>\n"
+)
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    return Response(_ROBOTS_TXT, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml():
+    return Response(_SITEMAP_XML, media_type="application/xml")
