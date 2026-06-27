@@ -5,7 +5,13 @@ const SHOP_ORDER = ["신라", "롯데", "신세계"];
 const batchForm = document.getElementById("batch-form");
 const batchInput = document.getElementById("batch-input");
 const batchBtn = document.getElementById("batch-btn");
+const clearBtn = document.getElementById("clear-btn");
 const MAX_BATCH_ROWS = 20;
+
+clearBtn.addEventListener("click", () => {
+  batchInput.value = "";
+  batchInput.focus();
+});
 
 // 엑셀(.xlsx) 다운로드용 누적 데이터 (면세점별 할인률+링크를 구조화해 보관)
 let exportRows = [];
