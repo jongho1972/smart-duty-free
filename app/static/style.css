@@ -139,6 +139,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 18px 20px 20px; }
   font-weight: 700;
   color: var(--slate-700);
 }
+.field-desc { font-size: var(--fs-caption); color: var(--slate-400); margin: 0; }
 .spinner {
   display: none;
   position: absolute;
