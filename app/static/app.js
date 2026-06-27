@@ -6,7 +6,7 @@ const batchForm = document.getElementById("batch-form");
 const batchInput = document.getElementById("batch-input");
 const batchBtn = document.getElementById("batch-btn");
 const clearBtn = document.getElementById("clear-btn");
-const MAX_BATCH_ROWS = 20;
+const MAX_BATCH_ROWS = 50;
 
 clearBtn.addEventListener("click", () => {
   batchInput.value = "";
