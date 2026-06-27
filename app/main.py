@@ -247,7 +247,7 @@ async def api_compare_by_sku(sku: str = Query("", description="SKU 번호")):
 
 EXPORT_HEADERS = [
     "SKU", "국문 브랜드명", "영문 브랜드명", "상품유형", "상품명", "REF.NO",
-    "신라 할인률", "롯데 할인률", "신세계 할인률",
+    "정가(USD)", "신라 할인률", "롯데 할인률", "신세계 할인률",
     "신라 링크", "롯데 링크", "신세계 링크",
 ]
 EXPORT_SHOPS = ["신라", "롯데", "신세계"]
@@ -277,16 +277,16 @@ async def api_export(payload: dict = Body(default={})):
         ws.append([
             r.get("sku", ""), r.get("brand_kr", ""), r.get("brand_en", ""),
             r.get("category", ""), r.get("product", ""), r.get("ref_no", ""),
-            "", "", "", "", "", "",
+            r.get("price_origin", ""), "", "", "", "", "", "",
         ])
         rownum = ws.max_row
         for i, s in enumerate(EXPORT_SHOPS):
             sh = shops.get(s) or {}
             # 할인률(숫자만, 링크 없음)
-            rate_cell = ws.cell(row=rownum, column=7 + i)
+            rate_cell = ws.cell(row=rownum, column=8 + i)
             rate_cell.value = sh.get("rate") or "—"
             # 가격확인 링크(별도 컬럼) — '바로가기' 텍스트에 하이퍼링크
-            link_cell = ws.cell(row=rownum, column=10 + i)
+            link_cell = ws.cell(row=rownum, column=11 + i)
             url = sh.get("url")
             if url:
                 link_cell.value = "바로가기"
@@ -295,7 +295,7 @@ async def api_export(payload: dict = Body(default={})):
             else:
                 link_cell.value = "—"
 
-    for col, width in zip("ABCDEFGHIJKL", (18, 16, 18, 12, 30, 14, 11, 11, 11, 11, 11, 11)):
+    for col, width in zip("ABCDEFGHIJKLM", (18, 16, 18, 12, 30, 14, 10, 11, 11, 11, 11, 11, 11)):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = "A2"
 

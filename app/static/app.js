@@ -67,6 +67,7 @@ batchForm.addEventListener("submit", async (e) => {
             <th>상품유형</th>
             <th class="col-name">상품명</th>
             <th>REF.NO</th>
+            <th class="col-rate">정가(USD)</th>
             <th class="col-rate">신라</th>
             <th class="col-rate">롯데</th>
             <th class="col-rate">신세계</th>
@@ -155,6 +156,7 @@ function buildProductRow(data, row, num) {
       <td data-label="상품유형">${escapeHtml(query.category || "")}</td>
       <td data-label="상품명" class="col-name">${escapeHtml(query.product || "")}</td>
       <td data-label="REF.NO" class="col-ref">${escapeHtml(query.ref_no || "")}</td>
+      <td data-label="정가(USD)" class="col-rate">${fmtPrice(shops["신라"])}</td>
       ${rateCell("신라")}
       ${rateCell("롯데")}
       ${rateCell("신세계")}
@@ -175,6 +177,9 @@ function extractExportRow(data, row) {
       url: r.url || null,
     };
   };
+  const shillaShop = shops["신라"];
+  const priceOrigin = shillaShop && shillaShop.found && shillaShop.price_origin != null
+    ? `$${Number(shillaShop.price_origin).toFixed(0)}` : "";
   return {
     sku: row.sku || "",
     brand_kr: query.brand || "",
@@ -182,6 +187,7 @@ function extractExportRow(data, row) {
     category: query.category || "",
     product: query.product || row.sku || "",
     ref_no: query.ref_no || "",
+    price_origin: priceOrigin,
     shops: { "신라": cell("신라"), "롯데": cell("롯데"), "신세계": cell("신세계") },
   };
 }
@@ -217,6 +223,14 @@ async function downloadExcel() {
   URL.revokeObjectURL(url);
 }
 
+// 정가 셀: 신라 price_origin 사용
+function fmtPrice(shopData) {
+  if (!shopData || !shopData.found) return `<span class="na">—</span>`;
+  const v = shopData.price_origin;
+  if (v == null) return `<span class="na">—</span>`;
+  return `$${Number(v).toFixed(0)}`;
+}
+
 // 조회 실패/미발견 행: 컬럼 형태는 유지하고 값만 "—"
 function buildErrorRow(row, msg, num) {
   const errMsg = msg ? `<span style="color:#99202a;font-size:.8rem">${escapeHtml(msg)}</span>` : "—";
@@ -224,7 +238,7 @@ function buildErrorRow(row, msg, num) {
     <tr>
       <td data-label="#" class="col-num">${num || ""}</td>
       <td data-label="SKU.NO" class="col-sku">${escapeHtml(row.sku || "")}</td>
-      <td data-label="국문 브랜드명" class="na" colspan="9">${errMsg}</td>
+      <td data-label="국문 브랜드명" class="na" colspan="10">${errMsg}</td>
     </tr>`;
 }
 
