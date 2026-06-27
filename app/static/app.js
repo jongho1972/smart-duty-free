@@ -13,6 +13,17 @@ clearBtn.addEventListener("click", () => {
   batchInput.focus();
 });
 
+// ?skus=sku1,sku2,... 파라미터로 진입 시 자동 입력·조회
+(function () {
+  const skusParam = new URLSearchParams(location.search).get("skus");
+  if (!skusParam) return;
+  const skus = skusParam.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!skus.length) return;
+  batchInput.value = skus.join("\n");
+  // DOM 렌더 완료 후 제출
+  requestAnimationFrame(() => batchForm.dispatchEvent(new Event("submit")));
+})();
+
 // 엑셀(.xlsx) 다운로드용 누적 데이터 (면세점별 할인률+링크를 구조화해 보관)
 let exportRows = [];
 
