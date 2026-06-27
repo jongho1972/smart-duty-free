@@ -110,7 +110,7 @@ batchForm.addEventListener("submit", async (e) => {
   }
 
   if (truncated) {
-    flashHint(`한 번에 최대 ${MAX_BATCH_ROWS}건까지만 비교합니다. 나머지는 다시 나눠 조회해 주세요.`);
+    flashHint(`한 번에 최대 ${MAX_BATCH_ROWS}개까지만 비교합니다. 나머지는 다시 나눠 조회해 주세요.`);
   }
 });
 
