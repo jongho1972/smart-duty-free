@@ -136,7 +136,7 @@ function buildProductRow(data, row, num) {
   const rateCell = (shop) => {
     const r = shops[shop];
     if (!r || !r.found) {
-      return `<td data-label="${shop} 할인률" class="col-rate na">${errors[shop] ? "실패" : "—"}</td>`;
+      return `<td data-label="${shop} 할인률" class="col-rate na">${errors[shop] ? "조회 실패" : "—"}</td>`;
     }
     const rate = r.discount_rate != null ? r.discount_rate + "%" : "—";
     return `<td data-label="${shop} 할인률" class="col-rate"><span class="rate">${rate}</span></td>`;
