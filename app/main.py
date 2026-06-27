@@ -63,6 +63,16 @@ def _asset_version() -> str:
 ASSET_VERSION = _asset_version()
 
 
+def _extract_creds(request: Request) -> dict:
+    """요청 헤더에서 면세점 자격증명을 추출한다. 미전송 시 빈 문자열."""
+    return {
+        "lotte_id": request.headers.get("X-Lotte-Id", ""),
+        "lotte_pw": request.headers.get("X-Lotte-Pw", ""),
+        "ssg_id":   request.headers.get("X-Ssg-Id",   ""),
+        "ssg_pw":   request.headers.get("X-Ssg-Pw",   ""),
+    }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
@@ -105,18 +115,20 @@ def _result_block(shop: str, p) -> dict:
     return d
 
 
-async def compare(brand: str, product: str) -> dict:
+async def compare(brand: str, product: str,
+                  lotte_id: str = "", lotte_pw: str = "",
+                  ssg_id: str = "", ssg_pw: str = "") -> dict:
     keyword = choose_keyword(brand, product)
     if not keyword:
         return {"error": "브랜드명 또는 상품명을 입력해 주세요."}
 
     # 롯데 회원가/할인율은 로그인해야 노출 → 세션 쿠키 확보(자격증명 없으면 None)
-    lotte_cookies = await clients.ensure_lotte_login()
+    lotte_cookies, lotte_cred_key = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
 
     # 롯데/신라는 동기(curl_cffi) → 스레드, 신세계는 async(Playwright)
-    lotte_t = asyncio.to_thread(clients.fetch_lotte, keyword, lotte_cookies)
+    lotte_t = asyncio.to_thread(clients.fetch_lotte, keyword, lotte_cookies, lotte_cred_key)
     shilla_t = asyncio.to_thread(clients.fetch_shilla, keyword)
-    ssg_t = clients.fetch_ssg_async(keyword)
+    ssg_t = clients.fetch_ssg_async(keyword, ssg_id or None, ssg_pw or None)
     lotte_r, shilla_r, ssg_r = await asyncio.gather(
         lotte_t, shilla_t, ssg_t, return_exceptions=True)
 
@@ -166,13 +178,17 @@ async def compare(brand: str, product: str) -> dict:
 
 @app.get("/api/compare")
 async def api_compare(
+    request: Request,
     brand: str = Query("", description="브랜드명"),
     product: str = Query("", description="상품명/모델"),
 ):
-    return JSONResponse(await compare(brand.strip(), product.strip()))
+    creds = _extract_creds(request)
+    return JSONResponse(await compare(brand.strip(), product.strip(), **creds))
 
 
-async def compare_by_sku(sku: str) -> dict:
+async def compare_by_sku(sku: str,
+                          lotte_id: str = "", lotte_pw: str = "",
+                          ssg_id: str = "", ssg_pw: str = "") -> dict:
     """SKU 번호 → 신라에서 정확 조회 → REF.NO로 롯데·신세계 검색."""
     shilla_product, meta = await asyncio.to_thread(clients.fetch_shilla_by_sku, sku)
 
@@ -187,9 +203,9 @@ async def compare_by_sku(sku: str) -> dict:
     if not search_kw:
         return {"error": "검색 키워드를 추출할 수 없습니다."}
 
-    lotte_cookies = await clients.ensure_lotte_login()
-    lotte_t = asyncio.to_thread(clients.fetch_lotte, search_kw, lotte_cookies)
-    ssg_t = clients.fetch_ssg_async(search_kw)
+    lotte_cookies, lotte_cred_key = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
+    lotte_t = asyncio.to_thread(clients.fetch_lotte, search_kw, lotte_cookies, lotte_cred_key)
+    ssg_t = clients.fetch_ssg_async(search_kw, ssg_id or None, ssg_pw or None)
     lotte_r, ssg_r = await asyncio.gather(lotte_t, ssg_t, return_exceptions=True)
 
     def pick(res):
@@ -241,8 +257,12 @@ async def compare_by_sku(sku: str) -> dict:
 
 
 @app.get("/api/compare-by-sku")
-async def api_compare_by_sku(sku: str = Query("", description="SKU 번호")):
-    return JSONResponse(await compare_by_sku(sku.strip()))
+async def api_compare_by_sku(
+    request: Request,
+    sku: str = Query("", description="SKU 번호"),
+):
+    creds = _extract_creds(request)
+    return JSONResponse(await compare_by_sku(sku.strip(), **creds))
 
 
 EXPORT_HEADERS = [

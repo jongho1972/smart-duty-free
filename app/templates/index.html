@@ -55,9 +55,53 @@
   </header>
 
   <main>
+    <div class="cred-panel">
+      <button class="cred-toggle" id="cred-toggle" type="button" aria-expanded="false" aria-controls="cred-body">
+        <span class="cred-toggle-text">내 계정 설정</span>
+        <span class="cred-badge" id="cred-badge" hidden>롯데 설정됨</span>
+        <span class="cred-arrow" aria-hidden="true">▾</span>
+      </button>
+      <div class="cred-body" id="cred-body" hidden>
+        <div class="cred-grid">
+          <div class="cred-group">
+            <div class="cred-site-header">
+              <span class="cred-site-name">롯데면세점</span>
+              <span class="cred-tag required">할인율 조회 필수</span>
+            </div>
+            <div class="cred-row">
+              <label for="lotte-id">L.POINT 아이디</label>
+              <input type="text" id="lotte-id" autocomplete="off" placeholder="아이디 입력" />
+            </div>
+            <div class="cred-row">
+              <label for="lotte-pw">비밀번호</label>
+              <input type="password" id="lotte-pw" autocomplete="off" placeholder="비밀번호 입력" />
+            </div>
+          </div>
+          <div class="cred-group">
+            <div class="cred-site-header">
+              <span class="cred-site-name">신세계면세점</span>
+              <span class="cred-tag optional">선택</span>
+            </div>
+            <div class="cred-row">
+              <label for="ssg-id">아이디</label>
+              <input type="text" id="ssg-id" autocomplete="off" placeholder="아이디 입력" />
+            </div>
+            <div class="cred-row">
+              <label for="ssg-pw">비밀번호</label>
+              <input type="password" id="ssg-pw" autocomplete="off" placeholder="비밀번호 입력" />
+            </div>
+          </div>
+        </div>
+        <div class="cred-footer">
+          <button type="button" id="cred-save-btn">저장</button>
+          <button type="button" id="cred-clear-btn">초기화</button>
+          <span class="cred-note">탭을 닫으면 사라집니다 · 서버에 저장되지 않습니다</span>
+        </div>
+      </div>
+    </div>
     <form id="batch-form" class="batch-card" autocomplete="off">
       <div class="field">
-        <label for="batch-input">SKU 번호 목록 · 한 줄에 하나씩</label>
+        <label for="batch-input">다건 조회</label>
         <textarea id="batch-input" rows="10" placeholder="예)&#10;976314000009&#10;731616005923&#10;867023000061">976314000009
 731616005923
 867023000061</textarea>

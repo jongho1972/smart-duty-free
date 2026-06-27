@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -189,20 +190,16 @@ LOTTE_COOKIE_TTL = 30 * 60  # 30분
 # 비로그인 시 검색 목록이 할인율 대신 노출하는 문구 → 로그인 성공/세션 판정에 사용
 _LOTTE_LOGIN_MARKER = "로그인 후 할인율 확인"
 
-_lotte_cookies: Optional[dict] = None
-_lotte_cookies_at: float = 0.0
+_lotte_sessions: dict[str, dict] = {}  # cred_key → {cookies, at}
 _lotte_lock = asyncio.Lock()
 
 
-async def _do_lotte_login() -> Optional[dict]:
+async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
     """L.POINT 로그인 후 lottedfs.com 세션 쿠키 수확.
 
     메모리 절약을 위해 신세계용 Chromium(_ssg_browser)을 공유하고, 로그인은
     격리된 새 컨텍스트에서 수행한 뒤 컨텍스트만 닫는다(별도 프로세스 미기동).
     """
-    lid, lpw = os.getenv("LOTTE_ID"), os.getenv("LOTTE_PW")
-    if not lid or not lpw:
-        return None
     await _ssg_browser._ensure()  # 공유 Chromium 보장
     ctx = await _ssg_browser._browser.new_context(
         user_agent=UA, locale="ko-KR", viewport={"width": 1366, "height": 900})
@@ -236,41 +233,51 @@ async def _do_lotte_login() -> Optional[dict]:
         await ctx.close()
 
 
-async def ensure_lotte_login() -> Optional[dict]:
-    """유효한 롯데 세션 쿠키를 반환(필요 시 로그인). 자격증명 없으면 None."""
-    global _lotte_cookies, _lotte_cookies_at
-    if not os.getenv("LOTTE_ID") or not os.getenv("LOTTE_PW"):
-        return None
+async def ensure_lotte_login(lid: Optional[str] = None, lpw: Optional[str] = None) -> tuple[Optional[dict], Optional[str]]:
+    """유효한 롯데 세션 쿠키와 cred_key를 반환(필요 시 로그인). 자격증명 없으면 (None, None).
+
+    lid/lpw 를 우선 사용하고, 없으면 환경변수 LOTTE_ID/LOTTE_PW 로 폴백한다.
+    세션은 cred_key(자격증명 해시) 별로 독립 캐시해 직원별 계정이 섞이지 않는다.
+    """
+    effective_lid = lid or os.getenv("LOTTE_ID")
+    effective_lpw = lpw or os.getenv("LOTTE_PW")
+    if not effective_lid or not effective_lpw:
+        return None, None
+    cred_key = hashlib.sha256(f"{effective_lid}:{effective_lpw}".encode()).hexdigest()
     now = time.monotonic()
-    if _lotte_cookies and (now - _lotte_cookies_at) < LOTTE_COOKIE_TTL:
-        return _lotte_cookies
+    session = _lotte_sessions.get(cred_key)
+    if session and session.get("cookies") and (now - session.get("at", 0.0)) < LOTTE_COOKIE_TTL:
+        return session["cookies"], cred_key
     async with _lotte_lock:
         now = time.monotonic()
-        if _lotte_cookies and (now - _lotte_cookies_at) < LOTTE_COOKIE_TTL:
-            return _lotte_cookies
+        session = _lotte_sessions.get(cred_key)
+        if session and session.get("cookies") and (now - session.get("at", 0.0)) < LOTTE_COOKIE_TTL:
+            return session["cookies"], cred_key
         try:
-            jar = await _do_lotte_login()
+            jar = await _do_lotte_login(effective_lid, effective_lpw)
         except Exception:
             jar = None
-        if jar:
-            _lotte_cookies, _lotte_cookies_at = jar, time.monotonic()
-        return _lotte_cookies
+        _lotte_sessions[cred_key] = {"cookies": jar, "at": time.monotonic()}
+        return jar, cred_key
 
 
-def invalidate_lotte_login() -> None:
-    """쿠키 만료(로그인 풀림) 감지 시 다음 호출에서 재로그인하도록 캐시 비움."""
-    global _lotte_cookies, _lotte_cookies_at
-    _lotte_cookies, _lotte_cookies_at = None, 0.0
+def invalidate_lotte_login(cred_key: Optional[str] = None) -> None:
+    """쿠키 만료(로그인 풀림) 감지 시 해당 세션 캐시를 비워 재로그인을 유도."""
+    if cred_key and cred_key in _lotte_sessions:
+        _lotte_sessions[cred_key]["cookies"] = None
+        _lotte_sessions[cred_key]["at"] = 0.0
+    elif not cred_key:
+        _lotte_sessions.clear()
 
 
-def fetch_lotte(keyword: str, cookies: Optional[dict] = None) -> list[Product]:
+def fetch_lotte(keyword: str, cookies: Optional[dict] = None, cred_key: Optional[str] = None) -> list[Product]:
     url = LOTTE_SEARCH.format(kw=creq.utils.quote(keyword))
     r = creq.get(url, headers={"User-Agent": UA}, impersonate="chrome",
                  timeout=TIMEOUT, cookies=cookies or None)
     r.raise_for_status()
     # 로그인 쿠키를 줬는데도 비로그인 문구가 보이면 세션 만료/실패 → 다음 호출 재로그인
     if cookies and _LOTTE_LOGIN_MARKER in r.text:
-        invalidate_lotte_login()
+        invalidate_lotte_login(cred_key)
     soup = BeautifulSoup(r.text, "html.parser")
     out: list[Product] = []
     for li in soup.select("ol#unitStyleList > li"):
@@ -516,7 +523,7 @@ class _SsgBrowser:
         self._pw = self._browser = self._ctx = None
         self._logged_in = False
 
-    async def _ensure_login(self) -> None:
+    async def _ensure_login(self, sid: Optional[str] = None, spw: Optional[str] = None) -> None:
         """WAF 통과 컨텍스트에서 회원 로그인 1회 수행(쿠키는 컨텍스트에 유지).
 
         비번이 클라이언트(KISA) 암호화라 레이어 로그인 폼을 직접 채워 제출한다.
@@ -524,8 +531,9 @@ class _SsgBrowser:
         """
         if self._logged_in:
             return
-        sid, spw = os.getenv("SSG_ID"), os.getenv("SSG_PW")
-        if not sid or not spw:
+        effective_sid = sid or os.getenv("SSG_ID")
+        effective_spw = spw or os.getenv("SSG_PW")
+        if not effective_sid or not effective_spw:
             self._logged_in = True
             return
         page = await self._ctx.new_page()
@@ -544,8 +552,8 @@ class _SsgBrowser:
             captcha = await page.evaluate(
                 "() => (document.getElementById('captchaTypeCd')||{}).value || ''")
             if not captcha:
-                await page.fill("#login_id", sid)
-                await page.fill("#pwd", spw)
+                await page.fill("#login_id", effective_sid)
+                await page.fill("#pwd", effective_spw)
                 # 제출 버튼(loginTryCheck가 KISA 암호화+AJAX 로그인 수행)
                 await page.click("#loginSubmitBtn")
                 await page.wait_for_timeout(3500)
@@ -555,14 +563,14 @@ class _SsgBrowser:
             await page.close()
             self._logged_in = True  # 성공/실패 무관 1회만 시도(매 검색 재시도·캡차 잠금 방지)
 
-    async def search(self, keyword: str) -> list[Product]:
+    async def search(self, keyword: str, sid: Optional[str] = None, spw: Optional[str] = None) -> list[Product]:
         # WAF가 직접 URL 진입을 차단하므로, 홈에서 검색 폼을 submit 해 결과로 이동한다.
         safe_kw = keyword.replace("\\", " ").replace("'", " ").strip()
         async with self._lock:
             for attempt in range(2):
                 try:
                     await self._ensure()
-                    await self._ensure_login()  # 최초 1회 회원 로그인
+                    await self._ensure_login(sid, spw)  # 최초 1회 회원 로그인
                     page = await self._ctx.new_page()
                     try:
                         await page.goto(SSG_HOME, wait_until="domcontentloaded", timeout=30000)
@@ -599,8 +607,8 @@ class _SsgBrowser:
 _ssg_browser = _SsgBrowser()
 
 
-async def fetch_ssg_async(keyword: str) -> list[Product]:
-    return await _ssg_browser.search(keyword)
+async def fetch_ssg_async(keyword: str, sid: Optional[str] = None, spw: Optional[str] = None) -> list[Product]:
+    return await _ssg_browser.search(keyword, sid, spw)
 
 
 def fetch_ssg(keyword: str) -> list[Product]:

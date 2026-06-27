@@ -1,3 +1,22 @@
+// ---- 계정 설정 관리 ----
+const CRED_KEY = "dfprice_creds";
+
+function loadCreds() {
+  try { return JSON.parse(sessionStorage.getItem(CRED_KEY) || "{}"); }
+  catch { return {}; }
+}
+function saveCreds(c) { sessionStorage.setItem(CRED_KEY, JSON.stringify(c)); }
+function clearCreds() { sessionStorage.removeItem(CRED_KEY); }
+function credHeaders() {
+  const c = loadCreds();
+  const h = {};
+  if (c.lotteId) h["X-Lotte-Id"] = c.lotteId;
+  if (c.lottePw) h["X-Lotte-Pw"] = c.lottePw;
+  if (c.ssgId)   h["X-Ssg-Id"]   = c.ssgId;
+  if (c.ssgPw)   h["X-Ssg-Pw"]   = c.ssgPw;
+  return h;
+}
+
 const results = document.getElementById("results");
 const hint = document.getElementById("hint");
 const SHOP_ORDER = ["신라", "롯데", "신세계"];
@@ -92,7 +111,7 @@ batchForm.addEventListener("submit", async (e) => {
       let tr, data = {};
       try {
         const params = new URLSearchParams({ sku: row.sku });
-        const res = await fetch(`/api/compare-by-sku?${params.toString()}`);
+        const res = await fetch(`/api/compare-by-sku?${params.toString()}`, { headers: credHeaders() });
         data = await res.json();
         tr = buildProductRow(data, row, i + 1);
       } catch (err) {
@@ -247,3 +266,57 @@ function escapeHtml(s) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
+
+// ---- 계정 설정 패널 UI ----
+(function initCredPanel() {
+  const toggle  = document.getElementById("cred-toggle");
+  const body    = document.getElementById("cred-body");
+  const badge   = document.getElementById("cred-badge");
+  const lotteId = document.getElementById("lotte-id");
+  const lottePw = document.getElementById("lotte-pw");
+  const ssgId   = document.getElementById("ssg-id");
+  const ssgPw   = document.getElementById("ssg-pw");
+  const saveBtn = document.getElementById("cred-save-btn");
+  const clearBtn2 = document.getElementById("cred-clear-btn");
+
+  function updateBadge() {
+    const c = loadCreds();
+    badge.hidden = !(c.lotteId && c.lottePw);
+  }
+
+  function syncInputs() {
+    const c = loadCreds();
+    lotteId.value = c.lotteId || "";
+    lottePw.value = c.lottePw || "";
+    ssgId.value   = c.ssgId   || "";
+    ssgPw.value   = c.ssgPw   || "";
+    updateBadge();
+  }
+
+  toggle.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!expanded));
+    body.hidden = expanded;
+  });
+
+  saveBtn.addEventListener("click", () => {
+    saveCreds({
+      lotteId: lotteId.value.trim(),
+      lottePw: lottePw.value,
+      ssgId:   ssgId.value.trim(),
+      ssgPw:   ssgPw.value,
+    });
+    updateBadge();
+    toggle.setAttribute("aria-expanded", "false");
+    body.hidden = true;
+    flashHint("계정 설정이 저장되었습니다. (탭을 닫으면 사라집니다)");
+  });
+
+  clearBtn2.addEventListener("click", () => {
+    clearCreds();
+    lotteId.value = lottePw.value = ssgId.value = ssgPw.value = "";
+    updateBadge();
+  });
+
+  syncInputs();
+})();
