@@ -229,6 +229,8 @@ async def compare_by_sku(sku: str) -> dict:
             "sku": sku,
             "ref_no": ref_no,
             "brand": brand_kr,
+            "brand_en": meta.get("brand_en", ""),
+            "category": meta.get("category", ""),
             "product": product_name,
             "keyword": search_kw,
         },
@@ -244,7 +246,7 @@ async def api_compare_by_sku(sku: str = Query("", description="SKU 번호")):
 
 
 EXPORT_HEADERS = [
-    "SKU", "상품명", "브랜드명", "면세가",
+    "SKU", "국문 브랜드명", "영문 브랜드명", "상품유형", "상품명", "REF.NO",
     "신라 할인률", "롯데 할인률", "신세계 할인률",
     "신라 링크", "롯데 링크", "신세계 링크",
 ]
@@ -272,16 +274,19 @@ async def api_export(payload: dict = Body(default={})):
 
     for r in rows:
         shops = (r or {}).get("shops") or {}
-        ws.append([r.get("sku", ""), r.get("product", ""), r.get("brand", ""), r.get("face", ""),
-                   "", "", "", "", "", ""])
+        ws.append([
+            r.get("sku", ""), r.get("brand_kr", ""), r.get("brand_en", ""),
+            r.get("category", ""), r.get("product", ""), r.get("ref_no", ""),
+            "", "", "", "", "", "",
+        ])
         rownum = ws.max_row
         for i, s in enumerate(EXPORT_SHOPS):
             sh = shops.get(s) or {}
             # 할인률(숫자만, 링크 없음)
-            rate_cell = ws.cell(row=rownum, column=5 + i)
+            rate_cell = ws.cell(row=rownum, column=7 + i)
             rate_cell.value = sh.get("rate") or "—"
             # 가격확인 링크(별도 컬럼) — '바로가기' 텍스트에 하이퍼링크
-            link_cell = ws.cell(row=rownum, column=8 + i)
+            link_cell = ws.cell(row=rownum, column=10 + i)
             url = sh.get("url")
             if url:
                 link_cell.value = "바로가기"
@@ -290,7 +295,7 @@ async def api_export(payload: dict = Body(default={})):
             else:
                 link_cell.value = "—"
 
-    for col, width in zip("ABCDEFGHIJ", (18, 30, 20, 10, 11, 11, 11, 11, 11, 11)):
+    for col, width in zip("ABCDEFGHIJKL", (18, 16, 18, 12, 30, 14, 11, 11, 11, 11, 11, 11)):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = "A2"
 

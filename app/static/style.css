@@ -143,14 +143,13 @@ body.loading .btn-label { visibility: hidden; }
 .hint { color: var(--slate-500); font-size: var(--fs-caption); margin: 16px 4px 0; }
 
 /* ---------- results ---------- */
-/* 상품명 줄바꿈 방지로 표가 넓어질 수 있어, 결과 영역은 본문(1120px)보다
-   좌우로 확장해 스크롤 없이 한눈에 보이도록 한다(화면이 좁으면 가로 스크롤). */
+/* 11컬럼 테이블은 넓으므로 결과 영역을 본문보다 크게 확장 */
 .results {
   margin-top: 30px;
   position: relative;
   left: 50%;
   transform: translateX(-50%);
-  width: min(94vw, 1180px);
+  width: min(96vw, 1500px);
 }
 
 .results-toolbar {
@@ -191,41 +190,67 @@ thead th {
   white-space: nowrap;
 }
 
-/* 숫자 컬럼(면세가 + 신라·롯데·신세계 할인률 = 3~6번째)은 우측 정렬 + 자릿수 정렬 */
-.compare-table th:nth-child(n+3):nth-child(-n+6),
-.compare-table td[data-label="면세가"],
-.compare-table td[data-label$="할인률"] {
+/* 할인률 컬럼(8~10번째) 우측 정렬 */
+.compare-table th.col-rate,
+.compare-table td.col-rate {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 tbody tr { border-bottom: 1px solid var(--slate-100); }
 tbody tr:last-child { border-bottom: none; }
 
-/* 상품별 비교 표 (공기관 제출용 심플 양식) */
-/* 상품명·브랜드명은 줄바꿈 없이 한 줄(필요 시 표가 가로 스크롤) */
-.compare-table td[data-label="상품명"] { font-weight: 700; white-space: nowrap; color: var(--navy-900); }
-.compare-table td[data-label="브랜드명"] { color: var(--slate-500); white-space: nowrap; }
-.compare-table td[data-label="면세가"] { font-weight: 600; color: var(--slate-700); }
+/* 번호 컬럼 */
+.col-num {
+  color: var(--slate-400);
+  font-size: .8rem;
+  width: 36px;
+  text-align: center;
+}
+/* SKU 컬럼: 모노스페이스 */
+.col-sku {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 700;
+  font-size: .88rem;
+  white-space: nowrap;
+  color: var(--navy-900);
+}
+/* 상품명 컬럼 */
+.col-name {
+  font-weight: 600;
+  color: var(--navy-900);
+  min-width: 160px;
+}
+/* REF.NO 컬럼: 모노스페이스 */
+.col-ref {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: .85rem;
+  white-space: nowrap;
+  color: var(--slate-700);
+}
 
-/* 크기는 다른 셀과 통일하고, 강조는 굵기·색으로만 (한 행 내 폰트 크기 일관) */
+/* 할인률 강조 */
 .rate {
   font-weight: 800;
   color: var(--navy-900);
 }
 
-/* 가격확인 링크 */
+/* 링크 셀 */
 .link-cell { white-space: nowrap; }
-.shop-link {
+.icon-link {
+  display: inline-block;
   font-weight: 600;
-  font-size: var(--fs-data);
+  font-size: .8rem;
   color: var(--blue-500);
   text-decoration: none;
-  border-bottom: 1.5px solid transparent;
-  margin-right: 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: 5px;
+  padding: 2px 7px;
+  margin-right: 4px;
   white-space: nowrap;
+  transition: background .12s, border-color .12s;
 }
-.shop-link:last-child { margin-right: 0; }
-.shop-link:hover { border-bottom-color: currentColor; }
+.icon-link:last-child { margin-right: 0; }
+.icon-link:hover { background: var(--blue-025); border-color: var(--blue-500); }
 
 .na { color: var(--slate-400); }
 
@@ -280,7 +305,7 @@ footer.footnote a:hover { color: var(--navy-900); }
     color: var(--navy-900);
     font-size: .82rem;
   }
-  /* 카드형 레이아웃에서는 상품명·브랜드명 다시 줄바꿈 허용 */
-  .compare-table td[data-label="상품명"],
-  .compare-table td[data-label="브랜드명"] { white-space: normal; }
+  /* 카드형 레이아웃에서는 상품명·SKU 다시 줄바꿈 허용 */
+  .compare-table td.col-name,
+  .compare-table td.col-sku { white-space: normal; }
 }

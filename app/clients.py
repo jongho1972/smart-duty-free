@@ -362,7 +362,8 @@ def fetch_shilla(keyword: str) -> list[Product]:
 def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
     """SKU 번호로 신라 상품 정확 조회 (skuNo 완전 일치).
 
-    Returns: (Product | None, meta) where meta = {ref_no, brand_kr, product_name}
+    Returns: (Product | None, meta) where meta =
+      {ref_no, brand_kr, brand_en, category, product_name}
     신라에서 상품 확정 후 ref_no 를 롯데·신세계 검색 키워드로 사용한다.
     """
     sess = creq.Session(impersonate="chrome")
@@ -390,8 +391,27 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
     code = hit.get("code", "")
     brand_cat = hit.get("brandCategory") or {}
     brand_kr = (hit.get("brandName") or brand_cat.get("brandName") or "").strip()
+    brand_en = (brand_cat.get("enName") or "").strip()
     product_name = (hit.get("productNameForDisp") or hit.get("name") or "").strip()
     ref_no = (hit.get("refNo") or "").strip()
+    category = ""
+
+    # 상세 페이지에서 영문 브랜드명·카테고리 보완 (sku_lookup과 동일 로직)
+    if code:
+        try:
+            dr = sess.get(SHILLA_DETAIL.format(code=code), timeout=TIMEOUT)
+            soup = BeautifulSoup(dr.text, "html.parser")
+            if not brand_en:
+                info_brand = soup.select_one("strong.info_brand")
+                if info_brand:
+                    ib_text = info_brand.get_text(strip=True)
+                    if " | " in ib_text:
+                        brand_kr, brand_en = [b.strip() for b in ib_text.split(" | ", 1)]
+            bc_items = soup.select("ul.breadcrumb_box li.on")
+            if bc_items:
+                category = bc_items[-1].get_text(strip=True)
+        except Exception:
+            pass
 
     up = hit.get("userPrice") or {}
     origin = up.get("salePrice")
@@ -410,7 +430,13 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
         url=SHILLA_DETAIL.format(code=code),
         soldout=soldout,
     )
-    return product, {"ref_no": ref_no, "brand_kr": brand_kr, "product_name": product_name}
+    return product, {
+        "ref_no": ref_no,
+        "brand_kr": brand_kr,
+        "brand_en": brand_en,
+        "category": category,
+        "product_name": product_name,
+    }
 
 
 # ---------------------------------------------------------------------------
