@@ -348,8 +348,13 @@ def fetch_shilla(keyword: str) -> list[Product]:
     for it in data.get("results", []):
         up = it.get("userPrice") or {}
         origin = up.get("salePrice")
-        sale = it.get("discountPrice") if it.get("discountPrice") is not None else up.get("discountPrice")
-        rate = it.get("discountRate")
+        # 마일리지(S리워즈) 선차감 할인이 적용되면 그 가격/율 우선 사용
+        if up.get("mileageDcApplyYn") and up.get("mileageDcPrice") is not None:
+            sale = up.get("mileageDcPrice")
+            rate = up.get("mileageDcRate")
+        else:
+            sale = it.get("discountPrice") if it.get("discountPrice") is not None else up.get("discountPrice")
+            rate = it.get("discountRate")
         code = it.get("code")
         soldout = (it.get("stockAvailable") or 0) <= 0
         out.append(Product(
@@ -422,8 +427,13 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
 
     up = hit.get("userPrice") or {}
     origin = up.get("salePrice")
-    sale = hit.get("discountPrice") if hit.get("discountPrice") is not None else up.get("discountPrice")
-    rate = hit.get("discountRate")
+    # 마일리지(S리워즈) 선차감 할인이 적용되면 그 가격/율 우선 사용
+    if up.get("mileageDcApplyYn") and up.get("mileageDcPrice") is not None:
+        sale = up.get("mileageDcPrice")
+        rate = up.get("mileageDcRate")
+    else:
+        sale = hit.get("discountPrice") if hit.get("discountPrice") is not None else up.get("discountPrice")
+        rate = hit.get("discountRate")
     soldout = (hit.get("stockAvailable") or 0) <= 0
 
     product = Product(
