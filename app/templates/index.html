@@ -57,22 +57,10 @@
   <main>
     <form id="batch-form" class="batch-card" autocomplete="off">
       <div class="field">
-        <label for="batch-input">상품 목록 · 한 줄에 하나씩 (상품명〈Tab〉브랜드명)</label>
-        <textarea id="batch-input" rows="10" placeholder="예)&#10;VVCC25/BR    VEDI VERO EYE(토산)&#10;HTB12/GRY    HUNTER EYE&#10;AS1178 001    A.SUI EYE (토산)">VVCC25/BR	VEDI VERO EYE(토산)
-HTB12/GRY	HUNTER EYE
-AS1178 001	A.SUI EYE (토산)
-JS58033Z C01	J.STUART EYE
-CONNIE C1	CARIN EYE(토산)
-HB_CE-C6-OB	LAPIZ SENSIBLE EYE
-0RB3447001 50	RAYBAN EYE
-TUMI SLG GUSSETED CARD CASE	TUMI
-CK LLG SOFT CRESCENT 30	CK BAG
-Crystalline wonder Watch	SWAROVSKI JEW
-SWAROVSK JEWE MILLENIA BRACELET CRY DTLI	SWAROVSKI JEW
-PANDORA JEWE Silver BRACELET	PANDORA JEW
-PANDORA JEWE Silver CHARM	PANDORA JEW
-SO29B706	SWATCH WATCH
-G -SHOCK(MEN)	G SHOCK WATCH</textarea>
+        <label for="batch-input">SKU 번호 목록 · 한 줄에 하나씩</label>
+        <textarea id="batch-input" rows="10" placeholder="예)&#10;954110000002&#10;288129000010&#10;001810000516">954110000002
+288129000010
+001810000516</textarea>
       </div>
       <div class="batch-actions">
         <button type="submit" id="batch-btn">
@@ -83,7 +71,7 @@ G -SHOCK(MEN)	G SHOCK WATCH</textarea>
       </div>
     </form>
 
-    <p class="hint" id="hint">실시간으로 3개 면세점을 조회합니다 · 첫 조회는 준비 과정 때문에 다소 느릴 수 있어요.</p>
+    <p class="hint" id="hint">신라에서 SKU로 상품과 REF.NO를 확인 후, 롯데·신세계를 검색합니다 · 첫 조회는 준비 과정 때문에 다소 느릴 수 있어요.</p>
 
     <section id="results" class="results" hidden></section>
   </main>

@@ -359,6 +359,60 @@ def fetch_shilla(keyword: str) -> list[Product]:
     return out
 
 
+def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
+    """SKU 번호로 신라 상품 정확 조회 (skuNo 완전 일치).
+
+    Returns: (Product | None, meta) where meta = {ref_no, brand_kr, product_name}
+    신라에서 상품 확정 후 ref_no 를 롯데·신세계 검색 키워드로 사용한다.
+    """
+    sess = creq.Session(impersonate="chrome")
+    sess.headers.update({"User-Agent": UA})
+    page = sess.get(SHILLA_SEARCH_PAGE.format(kw=creq.utils.quote(sku)), timeout=TIMEOUT)
+    m = re.search(r"CSRFToken['\"\s:=]+([0-9a-f-]{36})", page.text)
+    token = m.group(1) if m else ""
+    body = {
+        "json": json.dumps({
+            "category": "", "size": "10", "page": 0,
+            "text": sku, "within": "", "query": sku,
+            "pagination": "", "condition": {"discountRate": "0"},
+        }, ensure_ascii=False),
+        "CSRFToken": token,
+    }
+    r = sess.post(SHILLA_AJAX, data=body,
+                  headers={"X-Requested-With": "XMLHttpRequest"}, timeout=TIMEOUT)
+    r.raise_for_status()
+    results = r.json().get("results", [])
+
+    hit = next((it for it in results if it.get("skuNo") == sku), None)
+    if not hit:
+        return None, {}
+
+    code = hit.get("code", "")
+    brand_cat = hit.get("brandCategory") or {}
+    brand_kr = (hit.get("brandName") or brand_cat.get("brandName") or "").strip()
+    product_name = (hit.get("productNameForDisp") or hit.get("name") or "").strip()
+    ref_no = (hit.get("refNo") or "").strip()
+
+    up = hit.get("userPrice") or {}
+    origin = up.get("salePrice")
+    sale = hit.get("discountPrice") if hit.get("discountPrice") is not None else up.get("discountPrice")
+    rate = hit.get("discountRate")
+    soldout = (hit.get("stockAvailable") or 0) <= 0
+
+    product = Product(
+        shop="신라",
+        brand=brand_kr,
+        name=product_name,
+        price_origin=float(origin) if origin is not None else None,
+        price_sale=float(sale) if sale is not None else None,
+        discount_rate=int(round(rate)) if rate is not None else None,
+        price_krw=None,
+        url=SHILLA_DETAIL.format(code=code),
+        soldout=soldout,
+    )
+    return product, {"ref_no": ref_no, "brand_kr": brand_kr, "product_name": product_name}
+
+
 # ---------------------------------------------------------------------------
 # 신세계인터넷면세점 (Playwright 컨텍스트 내에서 직접 탐색)
 #   FECAS WAF 쿠키가 발급한 브라우저의 TLS 지문에 묶여 있어 curl 재사용이 불가.

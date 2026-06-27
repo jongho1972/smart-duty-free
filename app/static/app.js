@@ -10,26 +10,20 @@ const MAX_BATCH_ROWS = 20;
 // 엑셀(.xlsx) 다운로드용 누적 데이터 (면세점별 할인률+링크를 구조화해 보관)
 let exportRows = [];
 
-// 일괄 입력 파싱: 한 줄 = "모델코드〈Tab 또는 2칸+ 공백〉브랜드"
+// 일괄 입력 파싱: 한 줄 = SKU 번호 하나
 function parseBatch(raw) {
   return (raw || "")
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
-    .map((line) => {
-      const parts = line.split(/\t+|\s{2,}/).map((s) => s.trim()).filter(Boolean);
-      if (parts.length >= 2) {
-        return { product: parts[0], brand: parts.slice(1).join(" "), raw: line };
-      }
-      return { product: parts[0] || line, brand: "", raw: line };
-    });
+    .map((sku) => ({ sku }));
 }
 
 batchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   let rows = parseBatch(batchInput.value);
   if (rows.length === 0) {
-    flashHint("비교할 상품 목록을 한 줄에 하나씩 붙여넣어 주세요.");
+    flashHint("조회할 SKU 번호를 한 줄에 하나씩 입력해 주세요.");
     return;
   }
   let truncated = false;
@@ -49,15 +43,15 @@ batchForm.addEventListener("submit", async (e) => {
       <table class="compare-table">
         <thead>
           <tr>
-            <th>상품명</th><th>브랜드명</th><th>면세가</th>
+            <th>SKU</th><th>상품명 (신라)</th><th>면세가</th>
             <th>신라 할인률</th><th>롯데 할인률</th><th>신세계 할인률</th><th>가격확인 링크</th>
           </tr>
         </thead>
         <tbody id="compare-body"></tbody>
       </table>
     </div>
-    <p class="note">· 상품명·브랜드명은 입력값 그대로이며, <b>면세가</b>는 정가(USD) 대표값입니다.<br/>
-    · <b>엑셀 다운로드</b> 시 할인률과 별도로 면세점별 <b>가격확인 링크</b> 컬럼이 포함됩니다.</p>`;
+    <p class="note">· 신라에서 SKU로 상품을 확정한 뒤 REF.NO로 롯데·신세계를 검색합니다.<br/>
+    · <b>면세가</b>는 정가(USD) 대표값이며, <b>엑셀 다운로드</b> 시 면세점별 <b>가격확인 링크</b> 컬럼이 포함됩니다.</p>`;
   const tbody = results.querySelector("#compare-body");
   const excelBtn = results.querySelector("#excel-btn");
   excelBtn.addEventListener("click", downloadExcel);
@@ -67,11 +61,11 @@ batchForm.addEventListener("submit", async (e) => {
   try {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      prog.textContent = `조회 중… (${i + 1}/${rows.length}) ${row.raw}`;
+      prog.textContent = `조회 중… (${i + 1}/${rows.length}) SKU: ${row.sku}`;
       let tr, data = {};
       try {
-        const params = new URLSearchParams({ brand: row.brand, product: row.product });
-        const res = await fetch(`/api/compare?${params.toString()}`);
+        const params = new URLSearchParams({ sku: row.sku });
+        const res = await fetch(`/api/compare-by-sku?${params.toString()}`);
         data = await res.json();
         tr = buildProductRow(data, row);
       } catch (err) {
@@ -109,13 +103,18 @@ function fmtUsd(v) {
   return "$" + (Number.isInteger(v) ? v : v.toFixed(2));
 }
 
-// 조회 결과 1건 → 상품별 한 행(<tr>). 공기관 제출용 심플 양식: 뱃지 없음.
-// 상품명·브랜드명은 입력값(row) 그대로 표기한다.
+// 조회 결과 1건 → 상품별 한 행(<tr>).
+// 상품명·브랜드명은 신라 조회 결과(data.query)에서 가져온다.
 function buildProductRow(data, row) {
-  if (data.error) return buildErrorRow(row);
+  if (data.error) return buildErrorRow(row, data.error);
 
   const shops = data.shops || {};
   const errors = data.errors || {};
+  const query = data.query || {};
+
+  const productName = query.product || "";
+  const brandName = query.brand || "";
+  const refNo = query.ref_no || "";
 
   // 면세가: 정가 우선, 없으면 판매가 폴백(할인 없는 상품 대응)
   const faceUsd = faceValue(shops);
@@ -134,10 +133,18 @@ function buildProductRow(data, row) {
     .map((s) => `<a class="shop-link" href="${escapeHtml(shops[s].url)}" target="_blank" rel="noopener">${s} ↗</a>`)
     .join("");
 
+  const skuCell = refNo
+    ? `<span style="font-weight:700">${escapeHtml(row.sku)}</span><br/><small style="color:#6b7280">REF: ${escapeHtml(refNo)}</small>`
+    : `<span style="font-weight:700">${escapeHtml(row.sku)}</span>`;
+
+  const nameCell = brandName
+    ? `${escapeHtml(productName)}<br/><small style="color:#6b7280">${escapeHtml(brandName)}</small>`
+    : escapeHtml(productName || "—");
+
   return `
     <tr>
-      <td data-label="상품명">${escapeHtml(row.product || row.raw || "")}</td>
-      <td data-label="브랜드명">${escapeHtml(row.brand || "")}</td>
+      <td data-label="SKU">${skuCell}</td>
+      <td data-label="상품명 (신라)">${nameCell}</td>
       <td data-label="면세가">${faceUsd != null ? fmtUsd(faceUsd) : "—"}</td>
       ${rateCell("신라")}
       ${rateCell("롯데")}
@@ -164,6 +171,7 @@ function faceValue(shops) {
 function extractExportRow(data, row) {
   const shops = (data && data.shops) || {};
   const errors = (data && data.errors) || {};
+  const query = (data && data.query) || {};
   const faceUsd = faceValue(shops);
   const cell = (s) => {
     const r = shops[s];
@@ -174,8 +182,9 @@ function extractExportRow(data, row) {
     };
   };
   return {
-    product: row.product || row.raw || "",
-    brand: row.brand || "",
+    sku: row.sku || "",
+    product: query.product || row.sku || "",
+    brand: query.brand || "",
     face: faceUsd != null ? fmtUsd(faceUsd) : "",
     shops: { "신라": cell("신라"), "롯데": cell("롯데"), "신세계": cell("신세계") },
   };
@@ -213,11 +222,12 @@ async function downloadExcel() {
 }
 
 // 조회 실패/미발견 행: 컬럼 형태는 유지하고 값만 "—"
-function buildErrorRow(row) {
+function buildErrorRow(row, msg) {
+  const errMsg = msg ? `<small style="color:#99202a">${escapeHtml(msg)}</small>` : "—";
   return `
     <tr>
-      <td data-label="상품명">${escapeHtml(row.product || row.raw || "")}</td>
-      <td data-label="브랜드명">${escapeHtml(row.brand || "")}</td>
+      <td data-label="SKU">${escapeHtml(row.sku || "")}</td>
+      <td data-label="상품명 (신라)" class="na">${errMsg}</td>
       <td data-label="면세가" class="na">—</td>
       <td data-label="신라 할인률" class="na">—</td>
       <td data-label="롯데 할인률" class="na">—</td>

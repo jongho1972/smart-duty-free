@@ -172,8 +172,79 @@ async def api_compare(
     return JSONResponse(await compare(brand.strip(), product.strip()))
 
 
+async def compare_by_sku(sku: str) -> dict:
+    """SKU 번호 → 신라에서 정확 조회 → REF.NO로 롯데·신세계 검색."""
+    shilla_product, meta = await asyncio.to_thread(clients.fetch_shilla_by_sku, sku)
+
+    if shilla_product is None:
+        return {"error": f"신라 면세점에서 SKU {sku}를 찾을 수 없습니다."}
+
+    ref_no = meta.get("ref_no", "")
+    brand_kr = meta.get("brand_kr", "")
+    product_name = meta.get("product_name", "")
+    search_kw = ref_no or choose_keyword(brand_kr, product_name)
+
+    if not search_kw:
+        return {"error": "검색 키워드를 추출할 수 없습니다."}
+
+    lotte_cookies = await clients.ensure_lotte_login()
+    lotte_t = asyncio.to_thread(clients.fetch_lotte, search_kw, lotte_cookies)
+    ssg_t = clients.fetch_ssg_async(search_kw)
+    lotte_r, ssg_r = await asyncio.gather(lotte_t, ssg_t, return_exceptions=True)
+
+    def pick(res):
+        if isinstance(res, Exception) or not res:
+            return None
+        return clients.best_match(res, brand_kr, product_name, search_kw)
+
+    lotte = pick(lotte_r)
+    ssg = pick(ssg_r)
+
+    rate = DEFAULT_RATE
+    if lotte and lotte.price_krw and lotte.price_sale:
+        rate = lotte.price_krw / lotte.price_sale
+
+    for p in (shilla_product, ssg):
+        if p and p.price_krw is None and p.price_sale is not None:
+            p.price_krw = int(round(p.price_sale * rate))
+            p.krw_estimated = True  # type: ignore[attr-defined]
+
+    shops = {
+        "신라": _result_block("신라", shilla_product),
+        "롯데": _result_block("롯데", lotte),
+        "신세계": _result_block("신세계", ssg),
+    }
+    for key, p in (("신라", shilla_product), ("신세계", ssg)):
+        if p is not None:
+            shops[key]["krw_estimated"] = getattr(p, "krw_estimated", False)
+
+    errors = {
+        "신라": False,
+        "롯데": isinstance(lotte_r, Exception),
+        "신세계": isinstance(ssg_r, Exception),
+    }
+
+    return {
+        "query": {
+            "sku": sku,
+            "ref_no": ref_no,
+            "brand": brand_kr,
+            "product": product_name,
+            "keyword": search_kw,
+        },
+        "shops": shops,
+        "errors": errors,
+        "exchange_rate": round(rate, 2),
+    }
+
+
+@app.get("/api/compare-by-sku")
+async def api_compare_by_sku(sku: str = Query("", description="SKU 번호")):
+    return JSONResponse(await compare_by_sku(sku.strip()))
+
+
 EXPORT_HEADERS = [
-    "상품명", "브랜드명", "면세가",
+    "SKU", "상품명", "브랜드명", "면세가",
     "신라 할인률", "롯데 할인률", "신세계 할인률",
     "신라 링크", "롯데 링크", "신세계 링크",
 ]
@@ -201,16 +272,16 @@ async def api_export(payload: dict = Body(default={})):
 
     for r in rows:
         shops = (r or {}).get("shops") or {}
-        ws.append([r.get("product", ""), r.get("brand", ""), r.get("face", ""),
+        ws.append([r.get("sku", ""), r.get("product", ""), r.get("brand", ""), r.get("face", ""),
                    "", "", "", "", "", ""])
         rownum = ws.max_row
         for i, s in enumerate(EXPORT_SHOPS):
             sh = shops.get(s) or {}
             # 할인률(숫자만, 링크 없음)
-            rate_cell = ws.cell(row=rownum, column=4 + i)
+            rate_cell = ws.cell(row=rownum, column=5 + i)
             rate_cell.value = sh.get("rate") or "—"
             # 가격확인 링크(별도 컬럼) — '바로가기' 텍스트에 하이퍼링크
-            link_cell = ws.cell(row=rownum, column=7 + i)
+            link_cell = ws.cell(row=rownum, column=8 + i)
             url = sh.get("url")
             if url:
                 link_cell.value = "바로가기"
@@ -219,7 +290,7 @@ async def api_export(payload: dict = Body(default={})):
             else:
                 link_cell.value = "—"
 
-    for col, width in zip("ABCDEFGHI", (30, 20, 10, 11, 11, 11, 11, 11, 11)):
+    for col, width in zip("ABCDEFGHIJ", (18, 30, 20, 10, 11, 11, 11, 11, 11, 11)):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = "A2"
 
