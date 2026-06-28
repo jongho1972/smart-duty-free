@@ -269,8 +269,6 @@ tbody tr:last-child { border-bottom: none; }
 
 .na { color: var(--slate-400); }
 
-.note { color: var(--slate-500); font-size: var(--fs-caption); margin: 14px 4px 0; }
-
 /* ---------- footer (항공편수·출국객수 페이지와 동일 footnote 구조) ---------- */
 footer.footnote {
   max-width: 1120px;

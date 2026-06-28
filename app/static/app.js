@@ -77,8 +77,7 @@ batchForm.addEventListener("submit", async (e) => {
         <tbody id="compare-body"></tbody>
       </table>
     </div>
-    <p class="note">· 신라에서 SKU로 상품을 확정한 뒤 REF.NO로 롯데·신세계를 검색합니다.<br/>
-    · <b>엑셀 다운로드</b> 시 신라·롯데·신세계 링크 컬럼이 포함됩니다.</p>`;
+    `;
   const tbody = results.querySelector("#compare-body");
   const excelBtn = results.querySelector("#excel-btn");
   excelBtn.addEventListener("click", downloadExcel);
