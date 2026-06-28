@@ -84,6 +84,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 18px 20px 20px; }
   overflow-x: auto;
   transition: border-color .15s, box-shadow .15s;
 }
+.batch-card textarea::placeholder { color: #9CA3AF; font-weight: 400; }
 .batch-card textarea:focus {
   outline: none;
   border-color: var(--blue-500);
