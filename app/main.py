@@ -339,6 +339,33 @@ async def healthz():
     return {"ok": True}
 
 
+@app.post("/api/login-reset")
+async def api_login_reset(request: Request):
+    """SSG·롯데 로그인 캐시를 초기화해 다음 조회 시 재로그인을 유도."""
+    creds = _extract_creds(request)
+    clients.invalidate_lotte_login()
+    await clients._ssg_browser._reset()
+    # 바로 재로그인 시도(SSG)
+    ssg_id = creds.get("ssg_id") or os.getenv("SSG_ID", "")
+    ssg_pw = creds.get("ssg_pw") or os.getenv("SSG_PW", "")
+    lotte_id = creds.get("lotte_id") or os.getenv("LOTTE_ID", "")
+    lotte_pw = creds.get("lotte_pw") or os.getenv("LOTTE_PW", "")
+    ssg_ok = False
+    lotte_ok = False
+    try:
+        await clients._ssg_browser._ensure()
+        await clients._ssg_browser._ensure_login(ssg_id or None, ssg_pw or None)
+        ssg_ok = clients._ssg_browser._logged_in
+    except Exception:
+        pass
+    try:
+        jar, _ = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
+        lotte_ok = jar is not None
+    except Exception:
+        pass
+    return JSONResponse({"ssg_login": ssg_ok, "lotte_login": lotte_ok})
+
+
 _ROBOTS_TXT = (
     "User-agent: *\n"
     "Allow: /\n"

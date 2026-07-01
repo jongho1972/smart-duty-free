@@ -256,6 +256,29 @@ body.loading .btn-label { visibility: hidden; }
   color: var(--slate-400);
   margin: 0;
 }
+#cred-relogin-btn {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: var(--fs-caption);
+  color: var(--slate-700);
+  background: #fff;
+  border: 1.5px solid var(--slate-200);
+  border-radius: 7px;
+  padding: 7px 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, border-color .15s;
+}
+#cred-relogin-btn:hover:not([disabled]) { background: var(--blue-025); border-color: var(--blue-500); }
+#cred-relogin-btn[disabled] { opacity: .6; cursor: progress; }
+.cred-login-status {
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 5px;
+}
+.cred-login-status.ok   { color: #15803d; background: #dcfce7; }
+.cred-login-status.fail { color: #b91c1c; background: #fee2e2; }
 
 /* ---------- results ---------- */
 /* 11컬럼 테이블은 넓으므로 결과 영역을 본문보다 크게 확장 */

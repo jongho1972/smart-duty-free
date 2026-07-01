@@ -51,6 +51,40 @@ function updateCredBadge() {
     flashHint("계정 정보가 저장되었습니다.");
     document.getElementById("cred-panel")?.removeAttribute("open");
   });
+
+  const reloginBtn = document.getElementById("cred-relogin-btn");
+  const loginStatus = document.getElementById("cred-login-status");
+  reloginBtn?.addEventListener("click", async () => {
+    reloginBtn.disabled = true;
+    reloginBtn.textContent = "로그인 중…";
+    if (loginStatus) loginStatus.hidden = true;
+    try {
+      const c = loadCreds();
+      const hdrs = {};
+      if (c.lotteId) hdrs["X-Lotte-Id"] = c.lotteId;
+      if (c.lottePw) hdrs["X-Lotte-Pw"] = c.lottePw;
+      if (c.ssgId)   hdrs["X-Ssg-Id"]   = c.ssgId;
+      if (c.ssgPw)   hdrs["X-Ssg-Pw"]   = c.ssgPw;
+      const res = await fetch("/api/login-reset", { method: "POST", headers: hdrs });
+      const data = await res.json();
+      if (loginStatus) {
+        loginStatus.textContent = "롯데 " + (data.lotte_login ? "✓" : "✗")
+          + " 신세계 " + (data.ssg_login ? "✓" : "✗");
+        loginStatus.className = "cred-login-status"
+          + ((data.lotte_login && data.ssg_login) ? " ok" : " fail");
+        loginStatus.hidden = false;
+      }
+    } catch {
+      if (loginStatus) {
+        loginStatus.textContent = "연결 오류";
+        loginStatus.className = "cred-login-status fail";
+        loginStatus.hidden = false;
+      }
+    } finally {
+      reloginBtn.disabled = false;
+      reloginBtn.textContent = "로그인 재시도";
+    }
+  });
 })();
 
 const batchForm = document.getElementById("batch-form");
