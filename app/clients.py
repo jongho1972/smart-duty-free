@@ -194,12 +194,14 @@ _lotte_sessions: dict[str, dict] = {}  # cred_key → {cookies, at}
 _lotte_lock = asyncio.Lock()
 
 
-async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
+async def _do_lotte_login(lid: str, lpw: str) -> tuple[Optional[dict], dict]:
     """L.POINT 로그인 후 lottedfs.com 세션 쿠키 수확.
 
+    반환값: (쿠키 dict 또는 None, 디버그 info dict)
     메모리 절약을 위해 신세계용 Chromium(_ssg_browser)을 공유하고, 로그인은
     격리된 새 컨텍스트에서 수행한 뒤 컨텍스트만 닫는다(별도 프로세스 미기동).
     """
+    dbg: dict = {}
     await _ssg_browser._ensure()  # 공유 Chromium 보장
     ctx = await _ssg_browser._browser.new_context(
         user_agent=UA, locale="ko-KR", viewport={"width": 1366, "height": 900})
@@ -207,11 +209,30 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
         await ctx.add_init_script(
             "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
         page = await ctx.new_page()
-        # 롯데 홈 먼저 방문해 WAF/세션 쿠키 확보 후 로그인 페이지로 이동
-        await page.goto("https://kor.lottedfs.com", wait_until="domcontentloaded", timeout=30000)
-        await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+        # 롯데 DFS 홈에서 로그인 링크를 클릭해 returnUrl이 자동 설정되도록 유도
+        await page.goto("https://kor.lottedfs.com/kr/mainPage",
+                        wait_until="domcontentloaded", timeout=30000)
+        dbg["home_url"] = page.url
+        # 헤더 로그인 링크 찾아 클릭 → 찾지 못하면 직접 로그인 URL로 이동
+        login_clicked = False
+        for login_loc in [
+            page.get_by_role("link", name="로그인"),
+            page.locator("a[href*='/member/login']").first,
+            page.locator(".loginLink, .btn-login, [class*='login']").first,
+        ]:
+            try:
+                async with page.expect_navigation(wait_until="domcontentloaded", timeout=8000):
+                    await login_loc.click(timeout=3000)
+                login_clicked = True
+                break
+            except Exception:
+                continue
+        if not login_clicked:
+            await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+        dbg["login_page_url"] = page.url
         await page.wait_for_timeout(1000)
         # ID 입력: placeholder "아이디" → #loginLpId → input[type=text] 순으로 시도
+        id_filled = False
         for id_loc in [
             page.get_by_placeholder("아이디"),
             page.locator("#loginLpId"),
@@ -220,10 +241,13 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
         ]:
             try:
                 await id_loc.fill(lid, timeout=3000)
+                id_filled = True
                 break
             except Exception:
                 continue
-        # PW 입력: placeholder "비밀번호" → #password 순으로 시도
+        dbg["id_filled"] = id_filled
+        # PW 입력
+        pw_filled = False
         for pw_loc in [
             page.get_by_placeholder("비밀번호"),
             page.locator("#password"),
@@ -231,10 +255,13 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
         ]:
             try:
                 await pw_loc.fill(lpw, timeout=3000)
+                pw_filled = True
                 break
             except Exception:
                 continue
-        # 로그인 제출: 버튼 클릭 → JS 함수 → Enter 순으로 시도
+        dbg["pw_filled"] = pw_filled
+        # 로그인 제출
+        nav_ok = False
         try:
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
                 btn_clicked = False
@@ -255,40 +282,36 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
                         await page.evaluate("() => doLpointLogin('N')")
                     else:
                         await page.keyboard.press("Enter")
+            nav_ok = True
         except Exception:
-            await page.wait_for_timeout(4000)
-        # 로그인 후 lottedfs.com 홈으로 이동해 SSO 리다이렉트·쿠키 교환 완료 대기
-        await page.wait_for_timeout(1500)
-        try:
-            if "login" in page.url.lower():
-                # 아직 로그인 페이지에 있으면 리다이렉트 대기
-                await page.wait_for_url(lambda u: "login" not in u.lower(), timeout=8000)
-        except Exception:
-            pass
-        # lottedfs.com 메인으로 이동해 SSO 세션 쿠키 확보
-        try:
-            await page.goto("https://kor.lottedfs.com", wait_until="domcontentloaded", timeout=20000)
-        except Exception:
-            pass
-        await page.wait_for_timeout(1000)
+            await page.wait_for_timeout(5000)
+        dbg["nav_after_login"] = nav_ok
+        dbg["url_after_login"] = page.url
+        # 모든 리다이렉트·SSO 교환이 완료될 때까지 추가 대기
+        await page.wait_for_timeout(3000)
+        dbg["url_settled"] = page.url
         cookies = await ctx.cookies()
-        # lottedfs.com · lpoint.co.kr 도메인 쿠키 모두 수집
+        all_domains = list({c.get("domain", "") for c in cookies})
+        dbg["all_domains"] = all_domains
+        # lottedfs.com · lpoint.co.kr 도메인 쿠키 수집
         jar = {c["name"]: c["value"] for c in cookies
                if any(d in (c.get("domain") or "")
                       for d in ("lottedfs.com", "lpoint.co.kr"))}
-        # 검증: 수집된 쿠키 없으면 로그인 실패
+        dbg["jar_len"] = len(jar)
         if not jar:
-            return None
-        # 추가 검증: 검색 결과에 비로그인 마커가 없어야 함
+            return None, dbg
+        # 검증: 검색 결과에 비로그인 마커가 없어야 함
         try:
             await page.goto(LOTTE_SEARCH.format(kw="tumi"),
                             wait_until="domcontentloaded", timeout=20000)
             html = await page.content()
         except Exception:
             html = ""
-        if _LOTTE_LOGIN_MARKER in html:
-            return None
-        return jar
+        has_marker = _LOTTE_LOGIN_MARKER in html
+        dbg["has_login_marker"] = has_marker
+        if has_marker:
+            return None, dbg
+        return jar, dbg
     finally:
         await ctx.close()
 
@@ -314,7 +337,7 @@ async def ensure_lotte_login(lid: Optional[str] = None, lpw: Optional[str] = Non
         if session and session.get("cookies") and (now - session.get("at", 0.0)) < LOTTE_COOKIE_TTL:
             return session["cookies"], cred_key
         try:
-            jar = await _do_lotte_login(effective_lid, effective_lpw)
+            jar, _dbg = await _do_lotte_login(effective_lid, effective_lpw)
         except Exception:
             jar = None
         _lotte_sessions[cred_key] = {"cookies": jar, "at": time.monotonic()}

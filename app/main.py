@@ -358,12 +358,16 @@ async def api_login_reset(request: Request):
         ssg_ok = clients._ssg_browser._logged_in
     except Exception:
         pass
+    lotte_dbg: dict = {}
     try:
-        jar, _ = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
+        jar, lotte_dbg = await clients._do_lotte_login(
+            lotte_id or os.getenv("LOTTE_ID", ""),
+            lotte_pw or os.getenv("LOTTE_PW", ""),
+        )
         lotte_ok = jar is not None
-    except Exception:
-        pass
-    return JSONResponse({"ssg_login": ssg_ok, "lotte_login": lotte_ok})
+    except Exception as e:
+        lotte_dbg["exception"] = str(e)
+    return JSONResponse({"ssg_login": ssg_ok, "lotte_login": lotte_ok, "lotte_dbg": lotte_dbg})
 
 
 _ROBOTS_TXT = (
