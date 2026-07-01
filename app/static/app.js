@@ -2,6 +2,57 @@ const results = document.getElementById("results");
 const hint = document.getElementById("hint");
 const SHOP_ORDER = ["신라", "롯데", "신세계"];
 
+// ── 면세점 계정 관리 (sessionStorage) ──────────────────────────────────────
+function loadCreds() {
+  return {
+    lotteId: sessionStorage.getItem("df_lotte_id") || "",
+    lottePw: sessionStorage.getItem("df_lotte_pw") || "",
+    ssgId:   sessionStorage.getItem("df_ssg_id")   || "",
+    ssgPw:   sessionStorage.getItem("df_ssg_pw")   || "",
+  };
+}
+
+function updateCredBadge() {
+  const c = loadCreds();
+  const badge = document.getElementById("cred-badge");
+  if (!badge) return;
+  const hasL = c.lotteId && c.lottePw;
+  const hasS = c.ssgId && c.ssgPw;
+  if (hasL && hasS) {
+    badge.textContent = "롯데·신세계 저장됨";
+  } else if (hasL) {
+    badge.textContent = "롯데 저장됨";
+  } else if (hasS) {
+    badge.textContent = "신세계 저장됨";
+  } else {
+    badge.textContent = "미입력";
+  }
+  badge.className = "cred-badge" + (hasL || hasS ? " saved" : "");
+}
+
+(function initCreds() {
+  const c = loadCreds();
+  const li = document.getElementById("lotte-id");
+  const lp = document.getElementById("lotte-pw");
+  const si = document.getElementById("ssg-id");
+  const sp = document.getElementById("ssg-pw");
+  if (li) li.value = c.lotteId;
+  if (lp) lp.value = c.lottePw;
+  if (si) si.value = c.ssgId;
+  if (sp) sp.value = c.ssgPw;
+  updateCredBadge();
+
+  document.getElementById("cred-save-btn")?.addEventListener("click", () => {
+    sessionStorage.setItem("df_lotte_id", (li?.value || "").trim());
+    sessionStorage.setItem("df_lotte_pw", lp?.value || "");
+    sessionStorage.setItem("df_ssg_id",   (si?.value || "").trim());
+    sessionStorage.setItem("df_ssg_pw",   sp?.value || "");
+    updateCredBadge();
+    flashHint("계정 정보가 저장되었습니다.");
+    document.getElementById("cred-panel")?.removeAttribute("open");
+  });
+})();
+
 const batchForm = document.getElementById("batch-form");
 const batchInput = document.getElementById("batch-input");
 const batchBtn = document.getElementById("batch-btn");
@@ -91,7 +142,13 @@ batchForm.addEventListener("submit", async (e) => {
       let tr, data = {};
       try {
         const params = new URLSearchParams({ sku: row.sku });
-        const res = await fetch(`/api/compare-by-sku?${params.toString()}`);
+        const creds = loadCreds();
+        const credHeaders = {};
+        if (creds.lotteId) credHeaders["X-Lotte-Id"] = creds.lotteId;
+        if (creds.lottePw) credHeaders["X-Lotte-Pw"] = creds.lottePw;
+        if (creds.ssgId)   credHeaders["X-Ssg-Id"]   = creds.ssgId;
+        if (creds.ssgPw)   credHeaders["X-Ssg-Pw"]   = creds.ssgPw;
+        const res = await fetch(`/api/compare-by-sku?${params.toString()}`, { headers: credHeaders });
         data = await res.json();
         tr = buildProductRow(data, row, i + 1);
       } catch (err) {

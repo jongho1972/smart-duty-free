@@ -71,6 +71,29 @@
       </div>
     </form>
 
+    <details id="cred-panel" class="cred-panel">
+      <summary class="cred-summary">
+        면세점 계정 &nbsp;<span class="cred-badge" id="cred-badge">미입력</span>
+        <span class="cred-arrow" aria-hidden="true">▸</span>
+      </summary>
+      <div class="cred-body">
+        <div class="cred-row">
+          <span class="cred-label">롯데</span>
+          <input id="lotte-id" type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
+          <input id="lotte-pw" type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
+        </div>
+        <div class="cred-row">
+          <span class="cred-label">신세계</span>
+          <input id="ssg-id"   type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
+          <input id="ssg-pw"   type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
+        </div>
+        <div class="cred-actions">
+          <button type="button" id="cred-save-btn">저장</button>
+          <p class="cred-note">탭을 닫으면 자동 삭제됩니다(세션 저장). 입력하지 않으면 서버 환경변수로 대체됩니다.</p>
+        </div>
+      </div>
+    </details>
+
     <p class="hint" id="hint">신라에서 SKU로 상품과 REF.NO를 확인 후, 롯데·신세계를 검색합니다 · 첫 조회는 준비 과정 때문에 다소 느릴 수 있어요.</p>
 
     <section id="results" class="results" hidden></section>
