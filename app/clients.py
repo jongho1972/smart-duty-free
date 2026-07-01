@@ -624,8 +624,8 @@ class _SsgBrowser:
         """
         if self._logged_in:
             return
-        effective_sid = sid or os.getenv("SSG_ID")
-        effective_spw = spw or os.getenv("SSG_PW")
+        effective_sid = sid
+        effective_spw = spw
         if not effective_sid or not effective_spw:
             self._logged_in = True
             return

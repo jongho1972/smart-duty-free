@@ -346,8 +346,8 @@ async def api_login_reset(request: Request):
     clients.invalidate_lotte_login()
     await clients._ssg_browser._reset()
     # 바로 재로그인 시도(SSG)
-    ssg_id = creds.get("ssg_id") or os.getenv("SSG_ID", "")
-    ssg_pw = creds.get("ssg_pw") or os.getenv("SSG_PW", "")
+    ssg_id = creds.get("ssg_id", "")
+    ssg_pw = creds.get("ssg_pw", "")
     lotte_id = creds.get("lotte_id") or os.getenv("LOTTE_ID", "")
     lotte_pw = creds.get("lotte_pw") or os.getenv("LOTTE_PW", "")
     ssg_ok = False
