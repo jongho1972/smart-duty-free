@@ -65,10 +65,17 @@ function updateCredBadge() {
       const res = await fetch("/api/login-reset", { method: "POST", headers: hdrs });
       const data = await res.json();
       if (loginStatus) {
-        loginStatus.textContent = "L.POINT " + (data.lotte_login ? "✓" : "✗")
-          + " 신세계 " + (data.ssg_login ? "✓" : "✗");
-        loginStatus.className = "cred-login-status"
-          + ((data.lotte_login && data.ssg_login) ? " ok" : " fail");
+        const allOk = data.lotte_login && data.ssg_login;
+        if (allOk) {
+          loginStatus.textContent = "L.POINT ✓ 신세계 ✓";
+          loginStatus.className = "cred-login-status ok";
+        } else {
+          const parts = [];
+          if (!data.lotte_login) parts.push("L.POINT");
+          if (!data.ssg_login)   parts.push("신세계");
+          loginStatus.textContent = parts.join("·") + " 미로그인 — 해당 면세점 할인율 조회가 제한될 수 있습니다.";
+          loginStatus.className = "cred-login-status info";
+        }
         loginStatus.hidden = false;
       }
       if (data.lotte_login && data.ssg_login) {
@@ -76,8 +83,8 @@ function updateCredBadge() {
       }
     } catch {
       if (loginStatus) {
-        loginStatus.textContent = "연결 오류";
-        loginStatus.className = "cred-login-status fail";
+        loginStatus.textContent = "서버 연결 실패 — 잠시 후 다시 시도해 주세요.";
+        loginStatus.className = "cred-login-status info";
         loginStatus.hidden = false;
       }
     } finally {
