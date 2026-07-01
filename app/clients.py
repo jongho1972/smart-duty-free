@@ -230,11 +230,10 @@ async def _do_lotte_login(lid: str, lpw: str) -> tuple[Optional[dict], dict]:
         if not login_clicked:
             await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
         dbg["login_page_url"] = page.url
-        # 로그인 폼이 완전히 인터랙션 가능해질 때까지 대기
+        # 로그인 폼이 완전히 뜰 때까지 대기
         await page.wait_for_load_state("networkidle", timeout=10000)
-        await page.wait_for_timeout(800)
-        # ID 입력: placeholder "아이디" → #loginLpId → input[type=text] 순으로 시도
-        # type()으로 한 글자씩 입력해 봇 탐지 우회
+        await page.wait_for_timeout(500)
+        # ID 입력
         id_filled = False
         for id_loc in [
             page.get_by_placeholder("아이디"),
@@ -243,14 +242,12 @@ async def _do_lotte_login(lid: str, lpw: str) -> tuple[Optional[dict], dict]:
             page.locator("input[type='text']").first,
         ]:
             try:
-                await id_loc.click(timeout=3000)
-                await id_loc.type(lid, delay=60)
+                await id_loc.fill(lid, timeout=3000)
                 id_filled = True
                 break
             except Exception:
                 continue
         dbg["id_filled"] = id_filled
-        await page.wait_for_timeout(400)
         # PW 입력
         pw_filled = False
         for pw_loc in [
@@ -259,35 +256,37 @@ async def _do_lotte_login(lid: str, lpw: str) -> tuple[Optional[dict], dict]:
             page.locator("input[type='password']").first,
         ]:
             try:
-                await pw_loc.click(timeout=3000)
-                await pw_loc.type(lpw, delay=60)
+                await pw_loc.fill(lpw, timeout=3000)
                 pw_filled = True
                 break
             except Exception:
                 continue
         dbg["pw_filled"] = pw_filled
-        await page.wait_for_timeout(500)
-        # 로그인 제출
+        # Tab 키로 PW 필드 blur → KISA 보안모듈 암호화 트리거
+        await page.keyboard.press("Tab")
+        await page.wait_for_timeout(800)
+        # 로그인 제출: doLpointLogin JS 직접 호출 → 없으면 버튼 클릭 → Enter 순
         nav_ok = False
         try:
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
-                btn_clicked = False
-                for btn_loc in [
-                    page.get_by_role("button", name="로그인"),
-                    page.locator("button.loginBtn"),
-                    page.locator("button[type='submit']"),
-                ]:
-                    try:
-                        await btn_loc.click(timeout=3000)
-                        btn_clicked = True
-                        break
-                    except Exception:
-                        continue
-                if not btn_clicked:
-                    fn_exists = await page.evaluate("() => typeof doLpointLogin === 'function'")
-                    if fn_exists:
-                        await page.evaluate("() => doLpointLogin('N')")
-                    else:
+                fn_exists = await page.evaluate("() => typeof doLpointLogin === 'function'")
+                dbg["fn_doLpointLogin"] = fn_exists
+                if fn_exists:
+                    await page.evaluate("() => doLpointLogin('N')")
+                else:
+                    btn_clicked = False
+                    for btn_loc in [
+                        page.get_by_role("button", name="로그인"),
+                        page.locator("button.loginBtn"),
+                        page.locator("button[type='submit']"),
+                    ]:
+                        try:
+                            await btn_loc.click(timeout=3000)
+                            btn_clicked = True
+                            break
+                        except Exception:
+                            continue
+                    if not btn_clicked:
                         await page.keyboard.press("Enter")
             nav_ok = True
         except Exception:
