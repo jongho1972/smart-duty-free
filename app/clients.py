@@ -208,13 +208,27 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
             "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
         page = await ctx.new_page()
         await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
-        await page.fill("#loginLpId", lid)
-        await page.fill("#password", lpw)
+        # ID 필드: #loginLpId(구) 또는 input[name=id] 시도
+        id_sel = "#loginLpId" if await page.query_selector("#loginLpId") else "input[name='id']"
+        pw_sel = "#password" if await page.query_selector("#password") else "input[name='password']"
+        await page.fill(id_sel, lid)
+        await page.fill(pw_sel, lpw)
+        # doLpointLogin JS 함수 → 없으면 Enter 키 또는 버튼 클릭으로 폴백
         try:
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
-                await page.evaluate("() => doLpointLogin('N')")
+                fn_exists = await page.evaluate("() => typeof doLpointLogin === 'function'")
+                if fn_exists:
+                    await page.evaluate("() => doLpointLogin('N')")
+                else:
+                    # 로그인 버튼 직접 클릭 시도
+                    btn = (await page.query_selector("button.loginBtn")
+                           or await page.query_selector("button[type=submit]"))
+                    if btn:
+                        await btn.click()
+                    else:
+                        await page.keyboard.press("Enter")
         except Exception:
-            await page.wait_for_timeout(3000)  # 페이지 내 처리(비이동)일 수 있음
+            await page.wait_for_timeout(4000)
         # 로그인 성공 검증: 검색 목록에 "로그인 후 할인율 확인"이 사라졌는지 확인.
         # (ID/PW 오류 등으로 실패하면 비로그인 쿠키를 성공으로 캐싱하지 않도록)
         try:
