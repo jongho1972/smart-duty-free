@@ -62,18 +62,17 @@
       </summary>
       <div class="cred-body">
         <div class="cred-row">
-          <span class="cred-label">롯데</span>
-          <input id="lotte-id" type="text"     class="cred-input" placeholder="L.POINT 이메일/아이디" autocomplete="username" />
+          <span class="cred-label">L.POINT 통합회원</span>
+          <input id="lotte-id" type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
           <input id="lotte-pw" type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
         </div>
         <div class="cred-row">
-          <span class="cred-label">신세계</span>
+          <span class="cred-label">신세계면세점 회원</span>
           <input id="ssg-id"   type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
           <input id="ssg-pw"   type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
         </div>
         <div class="cred-actions">
-          <button type="button" id="cred-save-btn">저장</button>
-          <button type="button" id="cred-relogin-btn">로그인 재시도</button>
+          <button type="button" id="cred-relogin-btn">로그인</button>
           <span id="cred-login-status" class="cred-login-status" hidden></span>
           <p class="cred-note">탭을 닫으면 자동 삭제됩니다(세션 저장). 입력하지 않으면 서버 환경변수로 대체됩니다.</p>
         </div>
@@ -84,7 +83,9 @@
       <div class="field">
         <label for="batch-input">SKU 번호 입력</label>
         <p class="field-desc">한 줄에 하나씩 입력 · 엑셀 열을 선택해 복사한 뒤 그대로 붙여넣기 가능 · 최대 50개</p>
-        <textarea id="batch-input" rows="10" placeholder="976314000009&#10;731616005923&#10;867023000061"></textarea>
+        <textarea id="batch-input" rows="10" placeholder="976314000009&#10;731616005923&#10;867023000061">046131000048
+046331000002
+110231000030</textarea>
       </div>
       <div class="batch-actions">
         <button type="submit" id="batch-btn">

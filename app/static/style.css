@@ -213,7 +213,7 @@ body.loading .btn-label { visibility: hidden; }
   font-size: var(--fs-caption);
   font-weight: 700;
   color: var(--slate-700);
-  width: 44px;
+  width: 120px;
   flex-shrink: 0;
 }
 .cred-input {

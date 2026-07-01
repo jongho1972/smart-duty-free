@@ -19,9 +19,9 @@ function updateCredBadge() {
   const hasL = c.lotteId && c.lottePw;
   const hasS = c.ssgId && c.ssgPw;
   if (hasL && hasS) {
-    badge.textContent = "롯데·신세계 저장됨";
+    badge.textContent = "L.POINT·신세계 저장됨";
   } else if (hasL) {
-    badge.textContent = "롯데 저장됨";
+    badge.textContent = "L.POINT 저장됨";
   } else if (hasS) {
     badge.textContent = "신세계 저장됨";
   } else {
@@ -42,19 +42,16 @@ function updateCredBadge() {
   if (sp) sp.value = c.ssgPw;
   updateCredBadge();
 
-  document.getElementById("cred-save-btn")?.addEventListener("click", () => {
+  const reloginBtn = document.getElementById("cred-relogin-btn");
+  const loginStatus = document.getElementById("cred-login-status");
+  reloginBtn?.addEventListener("click", async () => {
+    // 현재 입력값을 sessionStorage에 먼저 저장
     sessionStorage.setItem("df_lotte_id", (li?.value || "").trim());
     sessionStorage.setItem("df_lotte_pw", lp?.value || "");
     sessionStorage.setItem("df_ssg_id",   (si?.value || "").trim());
     sessionStorage.setItem("df_ssg_pw",   sp?.value || "");
     updateCredBadge();
-    flashHint("계정 정보가 저장되었습니다.");
-    document.getElementById("cred-panel")?.removeAttribute("open");
-  });
 
-  const reloginBtn = document.getElementById("cred-relogin-btn");
-  const loginStatus = document.getElementById("cred-login-status");
-  reloginBtn?.addEventListener("click", async () => {
     reloginBtn.disabled = true;
     reloginBtn.textContent = "로그인 중…";
     if (loginStatus) loginStatus.hidden = true;
@@ -68,11 +65,14 @@ function updateCredBadge() {
       const res = await fetch("/api/login-reset", { method: "POST", headers: hdrs });
       const data = await res.json();
       if (loginStatus) {
-        loginStatus.textContent = "롯데 " + (data.lotte_login ? "✓" : "✗")
-          + " 신세계 " + (data.ssg_login ? "✓" : "✗");
+        loginStatus.textContent = "L.POINT " + (data.lotte_login ? "✓" : "✗")
+          + " 신세계 " + (data.ssg_login ? "✓" : "✗");
         loginStatus.className = "cred-login-status"
           + ((data.lotte_login && data.ssg_login) ? " ok" : " fail");
         loginStatus.hidden = false;
+      }
+      if (data.lotte_login && data.ssg_login) {
+        document.getElementById("cred-panel")?.removeAttribute("open");
       }
     } catch {
       if (loginStatus) {
@@ -82,7 +82,7 @@ function updateCredBadge() {
       }
     } finally {
       reloginBtn.disabled = false;
-      reloginBtn.textContent = "로그인 재시도";
+      reloginBtn.textContent = "로그인";
     }
   });
 })();
@@ -337,4 +337,3 @@ function escapeHtml(s) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
-
