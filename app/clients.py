@@ -207,6 +207,8 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
         await ctx.add_init_script(
             "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
         page = await ctx.new_page()
+        # 롯데 홈 먼저 방문해 WAF/세션 쿠키 확보 후 로그인 페이지로 이동
+        await page.goto("https://kor.lottedfs.com", wait_until="domcontentloaded", timeout=30000)
         await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(1000)
         # ID 입력: placeholder "아이디" → #loginLpId → input[type=text] 순으로 시도
@@ -255,20 +257,38 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
                         await page.keyboard.press("Enter")
         except Exception:
             await page.wait_for_timeout(4000)
-        # 로그인 성공 검증: 검색 목록에 "로그인 후 할인율 확인"이 사라졌는지 확인.
-        # (ID/PW 오류 등으로 실패하면 비로그인 쿠키를 성공으로 캐싱하지 않도록)
+        # 로그인 후 lottedfs.com 홈으로 이동해 SSO 리다이렉트·쿠키 교환 완료 대기
+        await page.wait_for_timeout(1500)
+        try:
+            if "login" in page.url.lower():
+                # 아직 로그인 페이지에 있으면 리다이렉트 대기
+                await page.wait_for_url(lambda u: "login" not in u.lower(), timeout=8000)
+        except Exception:
+            pass
+        # lottedfs.com 메인으로 이동해 SSO 세션 쿠키 확보
+        try:
+            await page.goto("https://kor.lottedfs.com", wait_until="domcontentloaded", timeout=20000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1000)
+        cookies = await ctx.cookies()
+        # lottedfs.com · lpoint.co.kr 도메인 쿠키 모두 수집
+        jar = {c["name"]: c["value"] for c in cookies
+               if any(d in (c.get("domain") or "")
+                      for d in ("lottedfs.com", "lpoint.co.kr"))}
+        # 검증: 수집된 쿠키 없으면 로그인 실패
+        if not jar:
+            return None
+        # 추가 검증: 검색 결과에 비로그인 마커가 없어야 함
         try:
             await page.goto(LOTTE_SEARCH.format(kw="tumi"),
                             wait_until="domcontentloaded", timeout=20000)
             html = await page.content()
         except Exception:
             html = ""
-        if not html or _LOTTE_LOGIN_MARKER in html:
-            return None  # 로그인 미완료 → 캐싱하지 않음(다음 호출에서 재시도)
-        cookies = await ctx.cookies()
-        jar = {c["name"]: c["value"] for c in cookies
-               if "lottedfs.com" in (c.get("domain") or "")}
-        return jar or None
+        if _LOTTE_LOGIN_MARKER in html:
+            return None
+        return jar
     finally:
         await ctx.close()
 
