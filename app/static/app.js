@@ -32,6 +32,8 @@ function updateCredBadge() {
 
 (function initCreds() {
   const c = loadCreds();
+  const credPanel = document.getElementById("cred-panel");
+  const credBadge = document.getElementById("cred-badge");
   const li = document.getElementById("lotte-id");
   const lp = document.getElementById("lotte-pw");
   const si = document.getElementById("ssg-id");
@@ -64,25 +66,50 @@ function updateCredBadge() {
       if (c.ssgPw)   hdrs["X-Ssg-Pw"]   = c.ssgPw;
       const res = await fetch("/api/login-reset", { method: "POST", headers: hdrs });
       const data = await res.json();
+      const lotteOk = !!data.lotte_login;
+      const ssgOk = !!data.ssg_login;
+      const anyOk = lotteOk || ssgOk;
+      const allOk = lotteOk && ssgOk;
       if (loginStatus) {
-        const allOk = data.lotte_login && data.ssg_login;
         if (allOk) {
-          loginStatus.textContent = "L.POINT ✓ 신세계 ✓";
+          loginStatus.textContent = "L.POINT ✓ 신세계 ✓ 로그인 성공";
+          loginStatus.className = "cred-login-status ok";
+        } else if (anyOk) {
+          const okName = lotteOk ? "L.POINT" : "신세계";
+          const failName = lotteOk ? "신세계" : "L.POINT";
+          loginStatus.textContent = `${okName} ✓ 로그인 성공 · ${failName} 미로그인`;
           loginStatus.className = "cred-login-status ok";
         } else {
-          const parts = [];
-          if (!data.lotte_login) parts.push("L.POINT");
-          if (!data.ssg_login)   parts.push("신세계");
-          loginStatus.textContent = parts.join("·") + " 미로그인 — 해당 면세점 할인율 조회가 제한될 수 있습니다.";
-          loginStatus.className = "cred-login-status info";
+          loginStatus.textContent = "L.POINT·신세계 로그인 실패 — 아이디·비밀번호를 확인해 주세요.";
+          loginStatus.className = "cred-login-status fail";
         }
         loginStatus.hidden = false;
       }
+      // 접힌 상태에서도 결과가 보이도록 배지에 어느 면세점에 로그인됐는지 표시
+      if (credBadge) {
+        if (allOk) {
+          credBadge.textContent = "L.POINT·신세계 로그인 성공";
+          credBadge.className = "cred-badge saved";
+        } else if (anyOk) {
+          credBadge.textContent = (lotteOk ? "L.POINT" : "신세계") + " 로그인 성공";
+          credBadge.className = "cred-badge saved";
+        } else {
+          credBadge.textContent = "로그인 실패";
+          credBadge.className = "cred-badge failed";
+        }
+      }
+      // 로그인에 성공한 경우에만 입력창을 접어 화면을 정리하고,
+      // 실패 시에는 아이디·비밀번호를 바로 고칠 수 있도록 펼친 채 둔다.
+      if (anyOk && credPanel) credPanel.open = false;
     } catch {
       if (loginStatus) {
         loginStatus.textContent = "서버 연결 실패 — 잠시 후 다시 시도해 주세요.";
-        loginStatus.className = "cred-login-status info";
+        loginStatus.className = "cred-login-status fail";
         loginStatus.hidden = false;
+      }
+      if (credBadge) {
+        credBadge.textContent = "로그인 실패";
+        credBadge.className = "cred-badge failed";
       }
     } finally {
       reloginBtn.disabled = false;

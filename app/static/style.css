@@ -198,6 +198,10 @@ body.loading .btn-label { visibility: hidden; }
   color: #15803d;
   background: #dcfce7;
 }
+.cred-badge.failed {
+  color: #b91c1c;
+  background: #fee2e2;
+}
 .cred-body {
   padding: 0 16px 14px;
   display: flex;
@@ -279,7 +283,6 @@ body.loading .btn-label { visibility: hidden; }
 }
 .cred-login-status.ok   { color: #15803d; background: #dcfce7; }
 .cred-login-status.fail { color: #b91c1c; background: #fee2e2; }
-.cred-login-status.info { color: var(--slate-500); background: transparent; font-weight: 400; }
 
 /* ---------- results ---------- */
 /* 11컬럼 테이블은 넓으므로 결과 영역을 본문보다 크게 확장 */
