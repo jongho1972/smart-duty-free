@@ -12,22 +12,12 @@ function loadCreds() {
   };
 }
 
+// 저장 여부는 입력창에 이미 값이 보이므로 별도 배지로 안내하지 않고,
+// 로그인 시도 결과(성공/실패)가 나오기 전까지는 배지를 숨긴다.
 function updateCredBadge() {
-  const c = loadCreds();
   const badge = document.getElementById("cred-badge");
   if (!badge) return;
-  const hasL = c.lotteId && c.lottePw;
-  const hasS = c.ssgId && c.ssgPw;
-  if (hasL && hasS) {
-    badge.textContent = "L.POINT·신세계 저장됨";
-  } else if (hasL) {
-    badge.textContent = "L.POINT 저장됨";
-  } else if (hasS) {
-    badge.textContent = "신세계 저장됨";
-  } else {
-    badge.textContent = "미입력";
-  }
-  badge.className = "cred-badge" + (hasL || hasS ? " saved" : "");
+  badge.hidden = true;
 }
 
 (function initCreds() {
@@ -97,6 +87,7 @@ function updateCredBadge() {
           credBadge.textContent = "로그인 실패";
           credBadge.className = "cred-badge failed";
         }
+        credBadge.hidden = false;
       }
       // 로그인에 성공한 경우에만 입력창을 접어 화면을 정리하고,
       // 실패 시에는 아이디·비밀번호를 바로 고칠 수 있도록 펼친 채 둔다.
@@ -110,6 +101,7 @@ function updateCredBadge() {
       if (credBadge) {
         credBadge.textContent = "로그인 실패";
         credBadge.className = "cred-badge failed";
+        credBadge.hidden = false;
       }
     } finally {
       reloginBtn.disabled = false;
