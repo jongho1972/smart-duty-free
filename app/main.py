@@ -352,12 +352,13 @@ async def api_login_reset(request: Request):
     lotte_pw = creds.get("lotte_pw") or os.getenv("LOTTE_PW", "")
     ssg_ok = False
     lotte_ok = False
-    try:
-        await clients._ssg_browser._ensure()
-        await clients._ssg_browser._ensure_login(ssg_id or None, ssg_pw or None)
-        ssg_ok = clients._ssg_browser._logged_in
-    except Exception:
-        pass
+    if ssg_id and ssg_pw:
+        try:
+            await clients._ssg_browser._ensure()
+            await clients._ssg_browser._ensure_login(ssg_id, ssg_pw)
+            ssg_ok = clients._ssg_browser._logged_in
+        except Exception:
+            pass
     lotte_dbg: dict = {}
     try:
         jar, lotte_dbg = await clients._do_lotte_login(
