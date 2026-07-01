@@ -78,9 +78,6 @@ function updateCredBadge() {
         }
         loginStatus.hidden = false;
       }
-      if (data.lotte_login && data.ssg_login) {
-        document.getElementById("cred-panel")?.removeAttribute("open");
-      }
     } catch {
       if (loginStatus) {
         loginStatus.textContent = "서버 연결 실패 — 잠시 후 다시 시도해 주세요.";
