@@ -230,8 +230,11 @@ async def _do_lotte_login(lid: str, lpw: str) -> tuple[Optional[dict], dict]:
         if not login_clicked:
             await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
         dbg["login_page_url"] = page.url
-        await page.wait_for_timeout(1000)
+        # 로그인 폼이 완전히 인터랙션 가능해질 때까지 대기
+        await page.wait_for_load_state("networkidle", timeout=10000)
+        await page.wait_for_timeout(800)
         # ID 입력: placeholder "아이디" → #loginLpId → input[type=text] 순으로 시도
+        # type()으로 한 글자씩 입력해 봇 탐지 우회
         id_filled = False
         for id_loc in [
             page.get_by_placeholder("아이디"),
@@ -240,12 +243,14 @@ async def _do_lotte_login(lid: str, lpw: str) -> tuple[Optional[dict], dict]:
             page.locator("input[type='text']").first,
         ]:
             try:
-                await id_loc.fill(lid, timeout=3000)
+                await id_loc.click(timeout=3000)
+                await id_loc.type(lid, delay=60)
                 id_filled = True
                 break
             except Exception:
                 continue
         dbg["id_filled"] = id_filled
+        await page.wait_for_timeout(400)
         # PW 입력
         pw_filled = False
         for pw_loc in [
@@ -254,12 +259,14 @@ async def _do_lotte_login(lid: str, lpw: str) -> tuple[Optional[dict], dict]:
             page.locator("input[type='password']").first,
         ]:
             try:
-                await pw_loc.fill(lpw, timeout=3000)
+                await pw_loc.click(timeout=3000)
+                await pw_loc.type(lpw, delay=60)
                 pw_filled = True
                 break
             except Exception:
                 continue
         dbg["pw_filled"] = pw_filled
+        await page.wait_for_timeout(500)
         # 로그인 제출
         nav_ok = False
         try:
