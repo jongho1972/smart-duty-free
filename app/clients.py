@@ -495,9 +495,17 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
     brand_en = (brand_cat.get("enName") or "").strip()
     product_name = (hit.get("productNameForDisp") or hit.get("name") or "").strip()
     ref_no = (hit.get("refNo") or "").strip()
+    # 검색 API 응답의 "코드:카테고리명" 목록에서 카테고리명 추출 (2뎁스가 더 구체적이면 우선)
     category = ""
+    for cat_key in ("disp2DepthCategoryList", "disp1DepthCategoryList"):
+        cat_items = hit.get(cat_key) or []
+        if cat_items:
+            last = str(cat_items[-1])
+            category = last.split(":", 1)[-1].strip() if ":" in last else last.strip()
+            if category:
+                break
 
-    # 상세 페이지에서 영문 브랜드명·카테고리 보완 (sku_lookup과 동일 로직)
+    # 상세 페이지에서 영문 브랜드명 보완 (sku_lookup과 동일 로직) + 카테고리 미확보 시 breadcrumb 보조
     if code:
         try:
             dr = sess.get(SHILLA_DETAIL.format(code=code), timeout=TIMEOUT)
@@ -508,9 +516,10 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
                     ib_text = info_brand.get_text(strip=True)
                     if " | " in ib_text:
                         brand_kr, brand_en = [b.strip() for b in ib_text.split(" | ", 1)]
-            bc_items = soup.select("ul.breadcrumb_box li.on")
-            if bc_items:
-                category = bc_items[-1].get_text(strip=True)
+            if not category:
+                bc_items = soup.select("ul.breadcrumb_box li.on")
+                if bc_items:
+                    category = bc_items[-1].get_text(strip=True)
         except Exception:
             pass
 
