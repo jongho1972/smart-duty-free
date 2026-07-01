@@ -55,22 +55,6 @@
   </header>
 
   <main>
-    <form id="batch-form" class="batch-card" autocomplete="off">
-      <div class="field">
-        <label for="batch-input">SKU 번호 입력</label>
-        <p class="field-desc">한 줄에 하나씩 입력 · 엑셀 열을 선택해 복사한 뒤 그대로 붙여넣기 가능 · 최대 50개</p>
-        <textarea id="batch-input" rows="10" placeholder="976314000009&#10;731616005923&#10;867023000061"></textarea>
-      </div>
-      <div class="batch-actions">
-        <button type="submit" id="batch-btn">
-          <span class="btn-label">전체 비교</span>
-          <span class="spinner" aria-hidden="true"></span>
-        </button>
-        <button type="button" id="clear-btn">초기화</button>
-        <span class="batch-progress" id="batch-progress" role="status" aria-live="polite" hidden></span>
-      </div>
-    </form>
-
     <details id="cred-panel" class="cred-panel">
       <summary class="cred-summary">
         면세점 계정 &nbsp;<span class="cred-badge" id="cred-badge">미입력</span>
@@ -93,6 +77,22 @@
         </div>
       </div>
     </details>
+
+    <form id="batch-form" class="batch-card" autocomplete="off">
+      <div class="field">
+        <label for="batch-input">SKU 번호 입력</label>
+        <p class="field-desc">한 줄에 하나씩 입력 · 엑셀 열을 선택해 복사한 뒤 그대로 붙여넣기 가능 · 최대 50개</p>
+        <textarea id="batch-input" rows="10" placeholder="976314000009&#10;731616005923&#10;867023000061"></textarea>
+      </div>
+      <div class="batch-actions">
+        <button type="submit" id="batch-btn">
+          <span class="btn-label">전체 비교</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="clear-btn">초기화</button>
+        <span class="batch-progress" id="batch-progress" role="status" aria-live="polite" hidden></span>
+      </div>
+    </form>
 
     <p class="hint" id="hint">신라에서 SKU로 상품과 REF.NO를 확인 후, 롯데·신세계를 검색합니다 · 첫 조회는 준비 과정 때문에 다소 느릴 수 있어요.</p>
 

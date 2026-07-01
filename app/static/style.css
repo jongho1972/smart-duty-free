@@ -160,7 +160,8 @@ body.loading .btn-label { visibility: hidden; }
 
 /* ---------- 면세점 계정 설정 패널 ---------- */
 .cred-panel {
-  margin-top: 12px;
+  margin-top: 0;
+  margin-bottom: 12px;
   border: 1px solid var(--slate-100);
   border-radius: 10px;
   background: #fafbfd;
