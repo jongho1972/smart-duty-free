@@ -208,23 +208,49 @@ async def _do_lotte_login(lid: str, lpw: str) -> Optional[dict]:
             "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
         page = await ctx.new_page()
         await page.goto(LOTTE_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
-        # ID 필드: #loginLpId(구) 또는 input[name=id] 시도
-        id_sel = "#loginLpId" if await page.query_selector("#loginLpId") else "input[name='id']"
-        pw_sel = "#password" if await page.query_selector("#password") else "input[name='password']"
-        await page.fill(id_sel, lid)
-        await page.fill(pw_sel, lpw)
-        # doLpointLogin JS 함수 → 없으면 Enter 키 또는 버튼 클릭으로 폴백
+        await page.wait_for_timeout(1000)
+        # ID 입력: placeholder "아이디" → #loginLpId → input[type=text] 순으로 시도
+        for id_loc in [
+            page.get_by_placeholder("아이디"),
+            page.locator("#loginLpId"),
+            page.locator("input[name='id']"),
+            page.locator("input[type='text']").first,
+        ]:
+            try:
+                await id_loc.fill(lid, timeout=3000)
+                break
+            except Exception:
+                continue
+        # PW 입력: placeholder "비밀번호" → #password 순으로 시도
+        for pw_loc in [
+            page.get_by_placeholder("비밀번호"),
+            page.locator("#password"),
+            page.locator("input[type='password']").first,
+        ]:
+            try:
+                await pw_loc.fill(lpw, timeout=3000)
+                break
+            except Exception:
+                continue
+        # 로그인 제출: 버튼 클릭 → JS 함수 → Enter 순으로 시도
         try:
             async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
-                fn_exists = await page.evaluate("() => typeof doLpointLogin === 'function'")
-                if fn_exists:
-                    await page.evaluate("() => doLpointLogin('N')")
-                else:
-                    # 로그인 버튼 직접 클릭 시도
-                    btn = (await page.query_selector("button.loginBtn")
-                           or await page.query_selector("button[type=submit]"))
-                    if btn:
-                        await btn.click()
+                btn_clicked = False
+                for btn_loc in [
+                    page.get_by_role("button", name="로그인"),
+                    page.locator("button.loginBtn"),
+                    page.locator("button[type='submit']"),
+                ]:
+                    try:
+                        await btn_loc.click(timeout=3000)
+                        btn_clicked = True
+                        break
+                    except Exception:
+                        continue
+                if not btn_clicked:
+                    fn_exists = await page.evaluate("() => typeof doLpointLogin === 'function'")
+                    if fn_exists:
+                        await page.evaluate("() => doLpointLogin('N')")
                     else:
                         await page.keyboard.press("Enter")
         except Exception:
