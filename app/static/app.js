@@ -81,8 +81,10 @@ function updateCredBadge() {
           credBadge.textContent = "L.POINT·신세계 로그인 성공";
           credBadge.className = "cred-badge saved";
         } else if (anyOk) {
-          credBadge.textContent = (lotteOk ? "L.POINT" : "신세계") + " 로그인 성공";
-          credBadge.className = "cred-badge saved";
+          const okName = lotteOk ? "L.POINT" : "신세계";
+          const failName = lotteOk ? "신세계" : "L.POINT";
+          credBadge.textContent = `${okName} 성공 · ${failName} 실패`;
+          credBadge.className = "cred-badge partial";
         } else {
           credBadge.textContent = "로그인 실패";
           credBadge.className = "cred-badge failed";
