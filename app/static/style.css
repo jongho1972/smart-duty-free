@@ -35,21 +35,21 @@ body {
 /* ---------- header ---------- */
 .hero {
   background: #fff;
-  padding: 44px 24px 10px;
-  text-align: center;
+  padding: 40px 20px 6px;
 }
-.hero-inner { max-width: 1120px; margin: 0 auto; }
+.hero-inner { max-width: 960px; margin: 0 auto; }
 .eyebrow {
-  letter-spacing: .22em;
+  letter-spacing: .2em;
   font-weight: 700;
   font-size: .7rem;
   color: var(--slate-400);
-  margin: 0 0 12px;
+  margin: 0 0 10px;
+  text-transform: uppercase;
 }
 .hero h1 {
   font-weight: 800;
-  font-size: clamp(1.8rem, 4.5vw, 2.6rem);
-  line-height: 1.15;
+  font-size: clamp(1.6rem, 3.5vw, 1.95rem);
+  line-height: 1.2;
   margin: 0;
   letter-spacing: -.025em;
   color: var(--navy-900);
@@ -57,7 +57,7 @@ body {
 .hero h1 span { color: var(--blue-500); }
 
 /* ---------- 일괄 입력 카드 ---------- */
-main { max-width: 1120px; margin: 0 auto; padding: 18px 20px 20px; }
+main { max-width: 960px; margin: 0 auto; padding: 18px 20px 20px; }
 
 .batch-card {
   display: grid;
@@ -404,7 +404,7 @@ tbody tr:last-child { border-bottom: none; }
 
 /* ---------- footer (항공편수·출국객수 페이지와 동일 footnote 구조) ---------- */
 footer.footnote {
-  max-width: 1120px;
+  max-width: 960px;
   margin: 48px auto 0;
   padding: 16px 20px 44px;
   border-top: 1px solid var(--slate-100);
