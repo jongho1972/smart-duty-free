@@ -572,7 +572,19 @@ def fetch_shilla_by_sku(sku: str, mall: str = "kr") -> tuple[Product | None, dic
     r.raise_for_status()
     results = r.json().get("results", [])
 
-    hit = next((it for it in results if it.get("skuNo") == sku), None)
+    # 같은 SKU에 표준 단품과 [2개이상구매] 같은 조건부 변형이 함께 잡힐 수 있다.
+    # 롯데·신세계는 이 혜택을 별도 상품이 아닌 한 페이지의 추가 혜택으로 노출하고
+    # 대표 할인율은 단품 기준(20%)이라, 공정 비교를 위해 신라도 대괄호 태그가
+    # 없는 표준 단품을 우선 선택한다(모두 태그면 첫 매칭 폴백). 외국몰 태그도
+    # 잡도록 반각·전각·CJK 여는 괄호를 모두 본다.
+    matches = [it for it in results if it.get("skuNo") == sku]
+
+    def _is_promo_variant(it: dict) -> bool:
+        nm = str(it.get("productNameForDisp") or it.get("name") or "").lstrip()
+        return bool(nm) and nm[0] in "[【「〔（({"
+
+    hit = next((it for it in matches if not _is_promo_variant(it)),
+               matches[0] if matches else None)
     if not hit:
         return None, {}
 
