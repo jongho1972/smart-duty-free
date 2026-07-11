@@ -44,6 +44,12 @@ python -m uvicorn app.main:app --reload --port 8077
 ### 롯데 지연 로그인 (lazy login, `main.resolve_lotte`)
 - **비로그인 우선 조회 → 매칭 & 할인율 가려짐일 때만 로그인 후 재조회.** 매 조회마다 무조건 선(先)로그인하던 eager 방식을 폐기(미보유·할인율 이미 노출·외국몰이 다수라 대부분 로그인 스킵).
 - 판정 흐름: ① `peek_lotte_session`으로 로그인 유발 없이 캐시 세션 확인(있으면 그 쿠키로 바로 조회) → ② 비로그인 조회 → ③ 미보유(`best_match None`)·마커 없음·할인율 이미 노출이면 **로그인 스킵** → ④ 매칭됐고 할인율 가려짐(`_LOTTE_LOGIN_MARKER`)일 때만 `ensure_lotte_login` 후 재조회. 자격증명 없으면 정가만 반환 + UI "🔒 로그인 시" 힌트(`login_required`).
+
+### 로그인 UI — 온디맨드 모달 (상시 패널 폐기)
+- 상단 상시 로그인 패널을 제거하고, 평소엔 **"🔑 면세점 로그인" 버튼 + 상태 칩(`#login-chip`)**만 노출. 실제 입력은 숨김 **모달(`#login-modal`)**.
+- 롯데 할인율이 가려진 행(`login_required`)의 "🔒 로그인 시"가 **클릭 가능** → 해당 몰만 스코프한 모달 오픈(`openLoginModal('lotte'|'ssg'|'all')`, `.cred-row[data-site]` 토글). 상단 버튼은 `all`(롯데+신세계).
+- 로그인 성공(`/api/login-reset`) 시 모달 닫고 **`refreshGatedRows()`가 가려졌던 행만 제자리 재조회**(전체 재조회 회피, `cmp-row-${num}`+`exportRows[num-1]` 동기화, 세대 토큰 `batchGeneration`으로 새 배치와의 레이스 차단).
+- 신세계는 게이팅 신호가 없어(익명으로 가격 노출) 자동 트리거는 없고, 상단 버튼으로 **수동 로그인만 가능**(회원가 필요 대비). 자격증명은 sessionStorage(탭 한정) + X-Lotte-*/X-Ssg-* 헤더.
 - 실측: 롯데 KR은 마커가 대부분 페이지에 뜨지만 일부 상품은 **비로그인에도 공개 할인율 노출**(예 발렌타인·RB3025). 이때 익명 할인율 == 회원 할인율(동일)이라 로그인 스킵해도 정확도 손실 없음. 조말론·몽블랑·투미·입생로랑 등은 전부 가려져 로그인 필요. `fetch_lotte`는 `(products, login_gated)` 튜플 반환.
 - 비밀번호 클라이언트 암호화(KISA)로 raw HTTP 로그인 복제 불가 → **Playwright로 L.POINT 로그인**(`kor.lps.lottedfs.com/kr/member/login`, `#loginLpId`+`#password`→`doLpointLogin('N')`) 후 `lottedfs.com` 세션 쿠키 수확해 `fetch_lotte`의 `curl_cffi`에 재사용(30분 캐시, `ensure_lotte_login`).
 - **신세계용 Chromium(`_ssg_browser`) 공유** — 새 컨텍스트만 열어 로그인(메모리 900m 가드 내). 캡차 없음.

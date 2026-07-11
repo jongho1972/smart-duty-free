@@ -55,29 +55,11 @@
   </header>
 
   <main>
-    <details id="cred-panel" class="cred-panel" open>
-      <summary class="cred-summary">
-        면세점 계정 &nbsp;<span class="cred-badge" id="cred-badge" hidden></span>
-        <span class="cred-arrow" aria-hidden="true">▸</span>
-      </summary>
-      <div class="cred-body">
-        <div class="cred-row">
-          <span class="cred-label">L.POINT 통합회원</span>
-          <input id="lotte-id" type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
-          <input id="lotte-pw" type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
-        </div>
-        <div class="cred-row">
-          <span class="cred-label">신세계면세점 회원</span>
-          <input id="ssg-id"   type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
-          <input id="ssg-pw"   type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
-        </div>
-        <div class="cred-actions">
-          <button type="button" id="cred-relogin-btn">로그인</button>
-          <span id="cred-login-status" class="cred-login-status" hidden></span>
-          <p class="cred-note">탭을 닫으면 로그인 정보는 자동 삭제됩니다.</p>
-        </div>
-      </div>
-    </details>
+    <!-- 상시 로그인 패널 제거 → 필요할 때만 모달로 로그인(롯데 할인율 게이팅 등). 기본은 로그인 불필요 -->
+    <div class="login-bar">
+      <span class="cred-badge" id="login-chip" hidden></span>
+      <button type="button" class="login-trigger" id="login-open-btn">🔑 면세점 로그인</button>
+    </div>
 
     <form id="batch-form" class="batch-card" autocomplete="off">
       <div class="field">
@@ -110,6 +92,34 @@
 
     <section id="results" class="results" hidden></section>
   </main>
+
+  <!-- 로그인 모달: 평소 숨김. 롯데 할인율 게이팅 시 자동, 또는 상단 버튼으로 수동 오픈 -->
+  <div class="login-modal-backdrop" id="login-modal" hidden>
+    <div class="login-modal" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+      <div class="login-modal-head">
+        <h2 id="login-modal-title">면세점 로그인</h2>
+        <button type="button" class="login-modal-close" id="login-close-btn" aria-label="닫기">✕</button>
+      </div>
+      <p class="login-modal-desc" id="login-modal-desc">할인율이 로그인에 가려진 면세점만 로그인하면 됩니다.</p>
+      <div class="cred-body">
+        <div class="cred-row" data-site="lotte">
+          <span class="cred-label">L.POINT 통합회원</span>
+          <input id="lotte-id" type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
+          <input id="lotte-pw" type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
+        </div>
+        <div class="cred-row" data-site="ssg">
+          <span class="cred-label">신세계면세점 회원</span>
+          <input id="ssg-id"   type="text"     class="cred-input" placeholder="아이디" autocomplete="username" />
+          <input id="ssg-pw"   type="password" class="cred-input" placeholder="비밀번호" autocomplete="current-password" />
+        </div>
+        <div class="cred-actions">
+          <button type="button" id="cred-relogin-btn">로그인</button>
+          <span id="cred-login-status" class="cred-login-status" hidden></span>
+        </div>
+        <p class="cred-note">로그인 정보는 이 브라우저 탭에만 임시 저장되며, 탭을 닫으면 자동 삭제됩니다.</p>
+      </div>
+    </div>
+  </div>
 
   <footer class="footnote">
     <div class="footnote-block">

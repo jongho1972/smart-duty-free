@@ -65,7 +65,8 @@ function loadLoginResult() {
   }
 }
 
-// 로그인 결과를 배지·상태 문구에 반영. result가 없으면(첫 방문 등) 둘 다 숨긴다.
+// 로그인 결과를 상태 문구(모달)·칩(상단)에 반영. 시도하지 않은 몰을 "실패"로
+// 표기하지 않도록 성공한 몰만 나열한다. result가 없으면(첫 방문) 둘 다 숨긴다.
 function renderLoginResult(loginStatus, credBadge, result) {
   if (!result) {
     if (loginStatus) loginStatus.hidden = true;
@@ -73,61 +74,81 @@ function renderLoginResult(loginStatus, credBadge, result) {
     return false;
   }
   const { lotteOk, ssgOk } = result;
-  const anyOk = lotteOk || ssgOk;
-  const allOk = lotteOk && ssgOk;
+  const okNames = [lotteOk && "L.POINT", ssgOk && "신세계"].filter(Boolean);
+  const anyOk = okNames.length > 0;
   if (loginStatus) {
-    if (allOk) {
-      loginStatus.textContent = "L.POINT ✓ 신세계 ✓ 로그인 성공";
-      loginStatus.className = "cred-login-status ok";
-    } else if (anyOk) {
-      const okName = lotteOk ? "L.POINT" : "신세계";
-      const failName = lotteOk ? "신세계" : "L.POINT";
-      loginStatus.textContent = `${okName} ✓ 로그인 성공 · ${failName} 미로그인`;
-      loginStatus.className = "cred-login-status ok";
-    } else {
-      loginStatus.textContent = "L.POINT·신세계 로그인 실패 — 아이디·비밀번호를 확인해 주세요.";
-      loginStatus.className = "cred-login-status fail";
-    }
+    loginStatus.textContent = anyOk
+      ? `${okNames.join("·")} 로그인됨`
+      : "로그인 실패 — 아이디·비밀번호를 확인해 주세요.";
+    loginStatus.className = anyOk ? "cred-login-status ok" : "cred-login-status fail";
     loginStatus.hidden = false;
   }
-  // 접힌 상태에서도 결과가 보이도록 배지에 어느 면세점에 로그인됐는지 표시
+  // 상단 칩: 모달이 닫혀도 어느 면세점에 로그인됐는지 보이게 표시
   if (credBadge) {
-    if (allOk) {
-      credBadge.textContent = "L.POINT·신세계 로그인 성공";
-      credBadge.className = "cred-badge saved";
-    } else if (anyOk) {
-      const okName = lotteOk ? "L.POINT" : "신세계";
-      const failName = lotteOk ? "신세계" : "L.POINT";
-      credBadge.textContent = `${okName} 성공 · ${failName} 실패`;
-      credBadge.className = "cred-badge partial";
-    } else {
-      credBadge.textContent = "로그인 실패";
-      credBadge.className = "cred-badge failed";
-    }
+    credBadge.textContent = anyOk ? `${okNames.join("·")} 로그인됨` : "로그인 실패";
+    credBadge.className = anyOk ? "cred-badge saved" : "cred-badge failed";
     credBadge.hidden = false;
   }
   return anyOk;
 }
 
+// 로그인 모달 열기/닫기 — 결과 표의 "🔒 로그인 시" 클릭 시 호출되도록 상위 스코프에 노출
+let openLoginModal = () => {};
+let closeLoginModal = () => {};
+
 (function initCreds() {
   const c = loadCreds();
-  const credPanel = document.getElementById("cred-panel");
-  const credBadge = document.getElementById("cred-badge");
+  const modal = document.getElementById("login-modal");
+  const chip = document.getElementById("login-chip");
+  const openBtn = document.getElementById("login-open-btn");
+  const closeBtn = document.getElementById("login-close-btn");
+  const desc = document.getElementById("login-modal-desc");
   const li = document.getElementById("lotte-id");
   const lp = document.getElementById("lotte-pw");
   const si = document.getElementById("ssg-id");
   const sp = document.getElementById("ssg-pw");
+  const lotteRow = document.querySelector('.cred-row[data-site="lotte"]');
+  const ssgRow = document.querySelector('.cred-row[data-site="ssg"]');
+  const reloginBtn = document.getElementById("cred-relogin-btn");
+  const loginStatus = document.getElementById("cred-login-status");
   if (li) li.value = c.lotteId;
   if (lp) lp.value = c.lottePw;
   if (si) si.value = c.ssgId;
   if (sp) sp.value = c.ssgPw;
 
-  const reloginBtn = document.getElementById("cred-relogin-btn");
-  const loginStatus = document.getElementById("cred-login-status");
+  // 이전 로그인 결과가 있으면 상단 칩에 복원(재조회 없이)
+  renderLoginResult(loginStatus, chip, loadLoginResult());
 
-  // 이전 로그인 결과가 있으면 재조회 없이 배지·상태 문구를 그대로 복원
-  const cachedAnyOk = renderLoginResult(loginStatus, credBadge, loadLoginResult());
-  if (cachedAnyOk && credPanel) credPanel.open = false;
+  openLoginModal = (site = "all") => {
+    const showLotte = site === "all" || site === "lotte";
+    const showSsg = site === "all" || site === "ssg";
+    if (lotteRow) lotteRow.hidden = !showLotte;
+    if (ssgRow) ssgRow.hidden = !showSsg;
+    if (desc) {
+      desc.textContent =
+        site === "lotte" ? "롯데 할인율은 L.POINT 로그인 후 표시됩니다."
+        : site === "ssg" ? "신세계 회원 로그인 시 회원가 기준으로 조회합니다."
+        : "할인율이 로그인에 가려진 면세점만 로그인하면 됩니다.";
+    }
+    if (loginStatus) loginStatus.hidden = true;
+    modal.hidden = false;
+    const firstInput = showLotte ? li : si;
+    setTimeout(() => firstInput?.focus(), 30);
+  };
+  closeLoginModal = () => { modal.hidden = true; };
+
+  openBtn?.addEventListener("click", () => openLoginModal("all"));
+  closeBtn?.addEventListener("click", closeLoginModal);
+  modal?.addEventListener("click", (e) => { if (e.target === modal) closeLoginModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && !modal.hidden) closeLoginModal();
+  });
+
+  // 결과 표의 "🔒 로그인 시" 클릭 → 해당 몰 로그인 모달
+  document.addEventListener("click", (e) => {
+    const hint = e.target.closest && e.target.closest(".login-hint.clickable");
+    if (hint) openLoginModal(hint.dataset.loginSite || "lotte");
+  });
 
   reloginBtn?.addEventListener("click", async () => {
     // 현재 입력값을 sessionStorage에 먼저 저장
@@ -139,33 +160,29 @@ function renderLoginResult(loginStatus, credBadge, result) {
     reloginBtn.disabled = true;
     reloginBtn.textContent = "로그인 중…";
     if (loginStatus) loginStatus.hidden = true;
-    if (credBadge) credBadge.hidden = true;
     try {
-      const c = loadCreds();
+      const cc = loadCreds();
       const hdrs = {};
-      if (c.lotteId) hdrs["X-Lotte-Id"] = c.lotteId;
-      if (c.lottePw) hdrs["X-Lotte-Pw"] = c.lottePw;
-      if (c.ssgId)   hdrs["X-Ssg-Id"]   = c.ssgId;
-      if (c.ssgPw)   hdrs["X-Ssg-Pw"]   = c.ssgPw;
+      if (cc.lotteId) hdrs["X-Lotte-Id"] = cc.lotteId;
+      if (cc.lottePw) hdrs["X-Lotte-Pw"] = cc.lottePw;
+      if (cc.ssgId)   hdrs["X-Ssg-Id"]   = cc.ssgId;
+      if (cc.ssgPw)   hdrs["X-Ssg-Pw"]   = cc.ssgPw;
       const res = await fetch("/api/login-reset", { method: "POST", headers: hdrs });
       const data = await res.json();
       const lotteOk = !!data.lotte_login;
       const ssgOk = !!data.ssg_login;
       saveLoginResult(lotteOk, ssgOk);
-      // 로그인에 성공한 경우에만 입력창을 접어 화면을 정리하고,
-      // 실패 시에는 아이디·비밀번호를 바로 고칠 수 있도록 펼친 채 둔다.
-      const anyOk = renderLoginResult(loginStatus, credBadge, { lotteOk, ssgOk });
-      if (anyOk && credPanel) credPanel.open = false;
+      const anyOk = renderLoginResult(loginStatus, chip, { lotteOk, ssgOk });
+      if (anyOk) {
+        // 성공 → 잠시 후 모달 닫고, 할인율이 가려졌던 행만 자동 재조회
+        setTimeout(closeLoginModal, 700);
+        refreshGatedRows();
+      }
     } catch {
       if (loginStatus) {
         loginStatus.textContent = "서버 연결 실패 — 잠시 후 다시 시도해 주세요.";
         loginStatus.className = "cred-login-status fail";
         loginStatus.hidden = false;
-      }
-      if (credBadge) {
-        credBadge.textContent = "로그인 실패";
-        credBadge.className = "cred-badge failed";
-        credBadge.hidden = false;
       }
     } finally {
       reloginBtn.disabled = false;
@@ -202,6 +219,10 @@ clearBtn.addEventListener("click", () => {
 let exportRows = [];
 // 직전 조회 SKU 목록 — 몰 토글 시 자동 재조회에 사용
 let lastSkus = [];
+// 롯데 할인율이 로그인에 가려진 행들 [{sku, num}] — 로그인 성공 시 이 행만 재조회
+let gatedRows = [];
+// 조회 세대 토큰 — 재조회(refreshGatedRows) 도중 새 배치가 시작되면 옛 재조회를 중단
+let batchGeneration = 0;
 
 // 일괄 입력 파싱: 한 줄 = SKU 번호 하나
 function parseBatch(raw) {
@@ -233,9 +254,11 @@ batchForm.addEventListener("submit", async (e) => {
 // 실제 일괄 조회 실행 — 폼 제출과 몰 토글 자동 재조회가 공유
 async function runBatch(rows) {
   lastSkus = rows.map((r) => r.sku);
+  batchGeneration++;   // 이전 배치의 재조회가 이 배치의 행을 건드리지 않도록 세대 증가
   setBatchLoading(true);
   results.hidden = false;
   exportRows = [];
+  gatedRows = [];
   results.innerHTML = `
     <div class="results-toolbar">
       <button type="button" id="excel-btn" disabled>엑셀 다운로드</button>
@@ -296,6 +319,11 @@ async function runBatch(rows) {
       }
       tbody.insertAdjacentHTML("beforeend", tr);
       exportRows.push(extractExportRow(data, row));
+      // 롯데 할인율이 로그인에 가려진 행 기록 → 로그인 성공 시 이 행만 재조회
+      const lotteShop = data.shops && data.shops["롯데"];
+      if (lotteShop && lotteShop.found && lotteShop.login_required && lotteShop.discount_rate == null) {
+        gatedRows.push({ sku: row.sku, num: i + 1 });
+      }
     }
   } finally {
     prog.hidden = true;
@@ -308,6 +336,39 @@ async function runBatch(rows) {
 function setBatchLoading(on) {
   document.body.classList.toggle("loading", on);
   batchBtn.disabled = on;
+}
+
+// 롯데 로그인 성공 후: 할인율이 가려졌던 행만 재조회해 제자리에서 갱신(전체 재조회 회피)
+async function refreshGatedRows() {
+  if (!gatedRows.length) return;
+  const gen = batchGeneration;   // 이 세대의 행만 갱신 — 새 배치가 시작되면 중단
+  const creds = loadCreds();
+  const credHeaders = {};
+  if (creds.lotteId) credHeaders["X-Lotte-Id"] = creds.lotteId;
+  if (creds.lottePw) credHeaders["X-Lotte-Pw"] = creds.lottePw;
+  if (creds.ssgId)   credHeaders["X-Ssg-Id"]   = creds.ssgId;
+  if (creds.ssgPw)   credHeaders["X-Ssg-Pw"]   = creds.ssgPw;
+  const still = [];
+  for (const g of gatedRows) {
+    if (gen !== batchGeneration) return;   // 새 배치가 시작됨 → 옛 재조회 중단(행 오염 방지)
+    try {
+      const params = new URLSearchParams({ sku: g.sku, mall: currentMall });
+      const res = await fetch(`/api/compare-by-sku?${params.toString()}`, { headers: credHeaders });
+      if (gen !== batchGeneration) return;
+      const data = await res.json();
+      const html = buildProductRow(data, { sku: g.sku }, g.num);
+      const oldTr = document.getElementById(`cmp-row-${g.num}`);
+      if (oldTr) oldTr.outerHTML = html;
+      exportRows[g.num - 1] = extractExportRow(data, { sku: g.sku });
+      const lotteShop = data.shops && data.shops["롯데"];
+      if (lotteShop && lotteShop.found && lotteShop.login_required && lotteShop.discount_rate == null) {
+        still.push(g); // 여전히 가려짐(로그인 실패 등) → 다음 로그인 때 재시도
+      }
+    } catch {
+      still.push(g);
+    }
+  }
+  if (gen === batchGeneration) gatedRows = still;
 }
 
 function flashHint(msg) {
@@ -332,9 +393,10 @@ function buildProductRow(data, row, num) {
     if (!r || !r.found) {
       return `<td data-label="${shop} 할인률" class="col-rate na">${errors[shop] ? "조회 실패" : "—"}</td>`;
     }
-    // 롯데 할인율이 로그인에 막혔고 자격증명이 없어 정가만 온 경우 안내
+    // 할인율이 로그인에 막혔고 자격증명이 없어 정가만 온 경우 → 클릭 시 해당 몰 로그인 모달
     if (r.discount_rate == null && r.login_required) {
-      return `<td data-label="${shop} 할인률" class="col-rate na"><span class="login-hint" title="로그인하면 할인율이 표시됩니다">🔒 로그인 시</span></td>`;
+      const site = shop === "신세계" ? "ssg" : "lotte";
+      return `<td data-label="${shop} 할인률" class="col-rate na"><span class="login-hint clickable" data-login-site="${site}" title="클릭해 로그인하면 할인율이 표시됩니다">🔒 로그인 시</span></td>`;
     }
     const rate = r.discount_rate != null ? r.discount_rate + "%" : "—";
     return `<td data-label="${shop} 할인률" class="col-rate"><span class="rate">${rate}</span></td>`;
@@ -346,7 +408,7 @@ function buildProductRow(data, row, num) {
     .join("");
 
   return `
-    <tr>
+    <tr id="cmp-row-${num}">
       <td data-label="#" class="col-num">${num}</td>
       <td data-label="SKU.NO" class="col-sku">${escapeHtml(row.sku)}</td>
       <td data-label="국문 브랜드명">${escapeHtml(query.brand || "")}</td>
