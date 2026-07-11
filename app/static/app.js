@@ -332,6 +332,10 @@ function buildProductRow(data, row, num) {
     if (!r || !r.found) {
       return `<td data-label="${shop} 할인률" class="col-rate na">${errors[shop] ? "조회 실패" : "—"}</td>`;
     }
+    // 롯데 할인율이 로그인에 막혔고 자격증명이 없어 정가만 온 경우 안내
+    if (r.discount_rate == null && r.login_required) {
+      return `<td data-label="${shop} 할인률" class="col-rate na"><span class="login-hint" title="로그인하면 할인율이 표시됩니다">🔒 로그인 시</span></td>`;
+    }
     const rate = r.discount_rate != null ? r.discount_rate + "%" : "—";
     return `<td data-label="${shop} 할인률" class="col-rate"><span class="rate">${rate}</span></td>`;
   };

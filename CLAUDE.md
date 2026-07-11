@@ -39,9 +39,12 @@ python -m uvicorn app.main:app --reload --port 8077
 
 | 면세점 | 방식 | 핵심 |
 |--------|------|------|
-| **롯데** | **L.POINT 로그인(Playwright)** + HTTP GET (`curl_cffi`) | 검색 결과가 **서버 렌더링 HTML**. `kor.lottedfs.com/kr/search?comSearchWord=` → `ol#unitStyleList > li` 파싱. 상품 링크는 `onclick`의 `ga_adltCheckPrdDtlMove(prdNo,prdOptNo)`로 구성. **회원가/할인율은 로그인해야 노출**(비로그인은 "로그인 후 할인율 확인"+정가만) |
+| **롯데** | **지연 로그인(L.POINT/Playwright)** + HTTP GET (`curl_cffi`) | 검색 결과가 **서버 렌더링 HTML**. `kor.lottedfs.com/kr/search?comSearchWord=` → `ol#unitStyleList > li` 파싱. 상품 링크는 `onclick`의 `ga_adltCheckPrdDtlMove(prdNo,prdOptNo)`로 구성. **할인율은 상품에 따라 로그인 게이팅**(가려지면 "로그인 후 할인율 확인" 마커) → 아래 "롯데 지연 로그인" 참조 |
 
-### 롯데 로그인 (회원가 수집)
+### 롯데 지연 로그인 (lazy login, `main.resolve_lotte`)
+- **비로그인 우선 조회 → 매칭 & 할인율 가려짐일 때만 로그인 후 재조회.** 매 조회마다 무조건 선(先)로그인하던 eager 방식을 폐기(미보유·할인율 이미 노출·외국몰이 다수라 대부분 로그인 스킵).
+- 판정 흐름: ① `peek_lotte_session`으로 로그인 유발 없이 캐시 세션 확인(있으면 그 쿠키로 바로 조회) → ② 비로그인 조회 → ③ 미보유(`best_match None`)·마커 없음·할인율 이미 노출이면 **로그인 스킵** → ④ 매칭됐고 할인율 가려짐(`_LOTTE_LOGIN_MARKER`)일 때만 `ensure_lotte_login` 후 재조회. 자격증명 없으면 정가만 반환 + UI "🔒 로그인 시" 힌트(`login_required`).
+- 실측: 롯데 KR은 마커가 대부분 페이지에 뜨지만 일부 상품은 **비로그인에도 공개 할인율 노출**(예 발렌타인·RB3025). 이때 익명 할인율 == 회원 할인율(동일)이라 로그인 스킵해도 정확도 손실 없음. 조말론·몽블랑·투미·입생로랑 등은 전부 가려져 로그인 필요. `fetch_lotte`는 `(products, login_gated)` 튜플 반환.
 - 비밀번호 클라이언트 암호화(KISA)로 raw HTTP 로그인 복제 불가 → **Playwright로 L.POINT 로그인**(`kor.lps.lottedfs.com/kr/member/login`, `#loginLpId`+`#password`→`doLpointLogin('N')`) 후 `lottedfs.com` 세션 쿠키 수확해 `fetch_lotte`의 `curl_cffi`에 재사용(30분 캐시, `ensure_lotte_login`).
 - **신세계용 Chromium(`_ssg_browser`) 공유** — 새 컨텍스트만 열어 로그인(메모리 900m 가드 내). 캡차 없음.
 - 자격증명은 **환경변수 `LOTTE_ID`/`LOTTE_PW`**: 로컬은 `.env`(gitignore), VPS는 `deploy/.env.dfprice`(docker `env_file`). 미설정 시 비로그인으로 graceful fallback.

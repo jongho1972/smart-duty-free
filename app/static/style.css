@@ -401,6 +401,13 @@ tbody tr:last-child { border-bottom: none; }
 .icon-link:hover { background: var(--blue-025); border-color: var(--blue-500); }
 
 .na { color: var(--slate-400); }
+.login-hint {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--slate-400);
+  white-space: nowrap;
+  cursor: help;
+}
 
 /* ---------- footer (항공편수·출국객수 페이지와 동일 footnote 구조) ---------- */
 footer.footnote {

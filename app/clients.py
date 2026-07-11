@@ -386,6 +386,26 @@ async def ensure_lotte_login(lid: Optional[str] = None, lpw: Optional[str] = Non
         return jar, cred_key
 
 
+def peek_lotte_session(lid: Optional[str] = None, lpw: Optional[str] = None) -> tuple[Optional[dict], Optional[str]]:
+    """로그인을 **유발하지 않고** 캐시된 유효 세션만 반환(지연 로그인용).
+
+    Returns (cookies, cred_key):
+      - 자격증명 없음        → (None, None)
+      - 자격증명 있고 캐시 유효 → (cookies, cred_key)
+      - 자격증명 있으나 캐시 없음 → (None, cred_key)  ← cred_key 존재 = 로그인 가능 신호
+    """
+    effective_lid = lid or os.getenv("LOTTE_ID")
+    effective_lpw = lpw or os.getenv("LOTTE_PW")
+    if not effective_lid or not effective_lpw:
+        return None, None
+    cred_key = hashlib.sha256(f"{effective_lid}:{effective_lpw}".encode()).hexdigest()
+    session = _lotte_sessions.get(cred_key)
+    now = time.monotonic()
+    if session and session.get("cookies") and (now - session.get("at", 0.0)) < LOTTE_COOKIE_TTL:
+        return session["cookies"], cred_key
+    return None, cred_key
+
+
 def invalidate_lotte_login(cred_key: Optional[str] = None) -> None:
     """쿠키 만료(로그인 풀림) 감지 시 해당 세션 캐시를 비워 재로그인을 유도."""
     if cred_key and cred_key in _lotte_sessions:
@@ -396,16 +416,19 @@ def invalidate_lotte_login(cred_key: Optional[str] = None) -> None:
 
 
 def fetch_lotte(keyword: str, cookies: Optional[dict] = None, cred_key: Optional[str] = None,
-                mall: str = "kr") -> list[Product]:
+                mall: str = "kr") -> tuple[list[Product], bool]:
+    """Returns (products, login_gated). login_gated=True면 비로그인이라 할인율이 가려진
+    상태(KR몰 마커 존재) → 호출측이 로그인 후 재조회 여부를 판단한다."""
     base = MALLS[mall]["lotte_base"]
     url = base + LOTTE_SEARCH_PATH.format(kw=creq.utils.quote(keyword))
     r = creq.get(url, headers={"User-Agent": UA,
                                "Accept-Language": MALLS[mall]["accept_language"]},
                  impersonate="chrome", timeout=TIMEOUT, cookies=cookies or None)
     r.raise_for_status()
-    # 로그인 쿠키를 줬는데도 비로그인 문구가 보이면 세션 만료/실패 → 다음 호출 재로그인
-    # (마커는 국문 문구라 KR몰에서만 판정)
-    if mall == "kr" and cookies and _LOTTE_LOGIN_MARKER in r.text:
+    # 비로그인 마커(국문, KR몰 전용): 할인율이 가려진 상태를 뜻한다.
+    login_gated = (mall == "kr" and _LOTTE_LOGIN_MARKER in r.text)
+    # 로그인 쿠키를 줬는데도 마커가 보이면 세션 만료/실패 → 다음 호출 재로그인
+    if cookies and login_gated:
         invalidate_lotte_login(cred_key)
     soup = BeautifulSoup(r.text, "html.parser")
     items = soup.select("ol#unitStyleList > li")
@@ -457,7 +480,7 @@ def fetch_lotte(keyword: str, cookies: Optional[dict] = None, cred_key: Optional
             price_krw=krw, url=base + LOTTE_DETAIL_PATH.format(prd=prd, opt=opt),
             soldout=soldout,
         ))
-    return out
+    return out, login_gated
 
 
 # ---------------------------------------------------------------------------

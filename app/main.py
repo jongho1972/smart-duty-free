@@ -115,6 +115,42 @@ def _result_block(shop: str, p) -> dict:
     return d
 
 
+async def resolve_lotte(keyword: str, mall: str, lotte_id: str, lotte_pw: str, matcher):
+    """롯데 지연 로그인 오케스트레이터.
+
+    비로그인으로 먼저 조회하고, **매칭된 상품의 할인율이 로그인에 가려졌을 때만**
+    로그인 후 재조회한다(미보유·할인율 노출·외국몰은 로그인 스킵). 이미 세션이
+    캐시돼 있으면 로그인을 유발하지 않고 그 쿠키로 바로 조회한다.
+
+    matcher(products) -> Product|None : 호출측의 매칭 로직(브랜드/토큰/폴백 포함).
+    Returns (Product|None, login_required: bool)
+      login_required=True : 할인율이 로그인에 막혔으나 자격증명이 없어 정가만 반환.
+    """
+    # 1) 캐시 세션이 있으면 로그인 유발 없이 그 쿠키로 조회
+    cookies, cred_key = clients.peek_lotte_session(lotte_id or None, lotte_pw or None)
+    if cookies:
+        prods, _ = await asyncio.to_thread(clients.fetch_lotte, keyword, cookies, cred_key, mall)
+        return matcher(prods), False
+
+    has_creds = cred_key is not None  # peek는 자격증명이 있을 때만 cred_key를 준다
+    # 2) 비로그인 조회
+    prods, gated = await asyncio.to_thread(clients.fetch_lotte, keyword, None, None, mall)
+    matched = matcher(prods)
+
+    # 3) 미보유 / 게이팅 아님 / 할인율 이미 노출 → 로그인 불필요
+    if matched is None or not gated or matched.discount_rate is not None:
+        return matched, False
+
+    # 4) 매칭 & 할인율 가려짐 → 자격증명 있으면 로그인 후 재조회
+    if not has_creds:
+        return matched, True
+    cookies, cred_key = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
+    if not cookies:
+        return matched, True  # 로그인 실패 → 비로그인 결과(정가) 유지
+    prods2, _ = await asyncio.to_thread(clients.fetch_lotte, keyword, cookies, cred_key, mall)
+    return (matcher(prods2) or matched), False
+
+
 async def compare(brand: str, product: str,
                   lotte_id: str = "", lotte_pw: str = "",
                   ssg_id: str = "", ssg_pw: str = "",
@@ -126,11 +162,10 @@ async def compare(brand: str, product: str,
     if not keyword:
         return {"error": "브랜드명 또는 상품명을 입력해 주세요."}
 
-    # 롯데 회원가/할인율은 로그인해야 노출 → 세션 쿠키 확보(자격증명 없으면 None)
-    lotte_cookies, lotte_cred_key = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
-
-    # 롯데/신라는 동기(curl_cffi) → 스레드, 신세계는 async(Playwright)
-    lotte_t = asyncio.to_thread(clients.fetch_lotte, keyword, lotte_cookies, lotte_cred_key, mall)
+    # 롯데는 지연 로그인: 비로그인 우선 조회 → 매칭 & 할인율 가려짐일 때만 로그인 후 재조회
+    lotte_t = resolve_lotte(keyword, mall, lotte_id, lotte_pw,
+                            lambda res: clients.best_match(res, brand, product, keyword) if res else None)
+    # 신라는 동기(curl_cffi) → 스레드, 신세계는 async(Playwright)
     shilla_t = asyncio.to_thread(clients.fetch_shilla, keyword, mall)
     if ssg_lang:
         ssg_t = clients.fetch_ssg_async(keyword, ssg_id or None, ssg_pw or None, ssg_lang)
@@ -138,7 +173,7 @@ async def compare(brand: str, product: str,
         async def _no_ssg():
             return []
         ssg_t = _no_ssg()
-    lotte_r, shilla_r, ssg_r = await asyncio.gather(
+    lotte_res, shilla_r, ssg_r = await asyncio.gather(
         lotte_t, shilla_t, ssg_t, return_exceptions=True)
 
     def pick(res):
@@ -146,7 +181,11 @@ async def compare(brand: str, product: str,
             return None
         return clients.best_match(res, brand, product, keyword)
 
-    lotte = pick(lotte_r)
+    if isinstance(lotte_res, Exception):
+        lotte, lotte_login_required, lotte_err = None, False, True
+    else:
+        lotte, lotte_login_required = lotte_res
+        lotte_err = False
     shilla = pick(shilla_r)
     ssg = pick(ssg_r)
 
@@ -172,10 +211,12 @@ async def compare(brand: str, product: str,
     for key, p in (("신라", shilla), ("신세계", ssg)):
         if p is not None:
             shops[key]["krw_estimated"] = getattr(p, "krw_estimated", False)
+    # 롯데 할인율이 로그인에 막혔으나 자격증명이 없어 정가만 나온 경우 UI 힌트
+    shops["롯데"]["login_required"] = lotte_login_required
 
     errors = {
         "신라": isinstance(shilla_r, Exception),
-        "롯데": isinstance(lotte_r, Exception),
+        "롯데": lotte_err,
         "신세계": bool(ssg_lang) and isinstance(ssg_r, Exception),
     }
 
@@ -228,29 +269,38 @@ async def compare_by_sku(sku: str,
     if not search_kw:
         return {"error": "검색 키워드를 추출할 수 없습니다."}
 
-    lotte_cookies, lotte_cred_key = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
-    lotte_t = asyncio.to_thread(clients.fetch_lotte, search_kw, lotte_cookies, lotte_cred_key, mall)
-    if ssg_lang:
-        ssg_t = clients.fetch_ssg_async(search_kw, ssg_id or None, ssg_pw or None, ssg_lang)
-    else:
-        async def _no_ssg():
-            return []
-        ssg_t = _no_ssg()
-    lotte_r, ssg_r = await asyncio.gather(lotte_t, ssg_t, return_exceptions=True)
-
     # 외국몰 결과는 상품명 언어가 달라 토큰 매칭이 약함 → 영문 브랜드 우선 사용,
     # 그래도 못 잡으면 REF.NO 정밀 검색(결과 소수)일 때 최상위 후보를 채택.
     match_brand = brand_kr if mall == "kr" else (brand_en or brand_kr)
 
-    def pick(res):
-        if isinstance(res, Exception) or not res:
+    def _match(res):
+        if not res:
             return None
         m = clients.best_match(res, match_brand, product_name, search_kw)
         if m is None and mall != "kr" and search_kw == ref_no and len(res) <= 5:
             m = next((p for p in res if not p.soldout), res[0])
         return m
 
-    lotte = pick(lotte_r)
+    # 롯데는 지연 로그인(할인율 가려짐 & 매칭될 때만 로그인)
+    lotte_t = resolve_lotte(search_kw, mall, lotte_id, lotte_pw, _match)
+    if ssg_lang:
+        ssg_t = clients.fetch_ssg_async(search_kw, ssg_id or None, ssg_pw or None, ssg_lang)
+    else:
+        async def _no_ssg():
+            return []
+        ssg_t = _no_ssg()
+    lotte_res, ssg_r = await asyncio.gather(lotte_t, ssg_t, return_exceptions=True)
+
+    def pick(res):
+        if isinstance(res, Exception) or not res:
+            return None
+        return _match(res)
+
+    if isinstance(lotte_res, Exception):
+        lotte, lotte_login_required, lotte_err = None, False, True
+    else:
+        lotte, lotte_login_required = lotte_res
+        lotte_err = False
     ssg = pick(ssg_r)
 
     rate = DEFAULT_RATE
@@ -272,10 +322,11 @@ async def compare_by_sku(sku: str,
     for key, p in (("신라", shilla_product), ("신세계", ssg)):
         if p is not None:
             shops[key]["krw_estimated"] = getattr(p, "krw_estimated", False)
+    shops["롯데"]["login_required"] = lotte_login_required
 
     errors = {
         "신라": False,
-        "롯데": isinstance(lotte_r, Exception),
+        "롯데": lotte_err,
         "신세계": bool(ssg_lang) and isinstance(ssg_r, Exception),
     }
 
