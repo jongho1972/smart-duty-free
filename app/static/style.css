@@ -304,6 +304,21 @@ body.loading .btn-label { visibility: hidden; }
 }
 #cred-relogin-btn:hover:not([disabled]) { background: var(--blue-025); border-color: var(--blue-500); }
 #cred-relogin-btn[disabled] { opacity: .6; cursor: progress; }
+#cred-refetch-btn {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: var(--fs-caption);
+  color: #fff;
+  background: var(--navy-900);
+  border: none;
+  border-radius: 7px;
+  padding: 8px 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+#cred-refetch-btn:hover:not([disabled]) { background: var(--navy-700); }
+#cred-refetch-btn[disabled] { opacity: .6; cursor: progress; }
 .cred-login-status {
   font-size: var(--fs-caption);
   font-weight: 700;

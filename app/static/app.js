@@ -110,6 +110,7 @@ let closeLoginModal = () => {};
   const lotteRow = document.querySelector('.cred-row[data-site="lotte"]');
   const ssgRow = document.querySelector('.cred-row[data-site="ssg"]');
   const reloginBtn = document.getElementById("cred-relogin-btn");
+  const refetchBtn = document.getElementById("cred-refetch-btn");
   const loginStatus = document.getElementById("cred-login-status");
   if (li) li.value = c.lotteId;
   if (lp) lp.value = c.lottePw;
@@ -119,18 +120,27 @@ let closeLoginModal = () => {};
   // 이전 로그인 결과가 있으면 상단 칩에 복원(재조회 없이)
   renderLoginResult(loginStatus, chip, loadLoginResult());
 
-  openLoginModal = (site = "all") => {
-    const showLotte = site === "all" || site === "lotte";
-    const showSsg = site === "all" || site === "ssg";
+  // sites: "all" | "lotte" | "ssg" | ["lotte","ssg"] — 표시할 몰 목록
+  openLoginModal = (sites) => {
+    let list;
+    if (sites === "all" || sites == null) list = ["lotte", "ssg"];
+    else if (typeof sites === "string") list = [sites];
+    else list = sites.length ? sites : ["lotte", "ssg"];
+    const showLotte = list.includes("lotte");
+    const showSsg = list.includes("ssg");
     if (lotteRow) lotteRow.hidden = !showLotte;
     if (ssgRow) ssgRow.hidden = !showSsg;
     if (desc) {
       desc.textContent =
-        site === "lotte" ? "롯데 할인율은 L.POINT 로그인 후 표시됩니다."
-        : site === "ssg" ? "신세계 회원 로그인 시 회원가 기준으로 조회합니다."
-        : "할인율이 로그인에 가려진 면세점만 로그인하면 됩니다.";
+        showLotte && showSsg ? "로그인이 필요한 면세점을 로그인한 뒤 ‘다시 조회’를 눌러 주세요."
+        : showLotte ? "롯데 L.POINT 로그인 후 ‘다시 조회’를 눌러 주세요."
+        : "신세계 회원 로그인 후 ‘다시 조회’를 눌러 주세요.";
     }
     if (loginStatus) loginStatus.hidden = true;
+    // 이미 로그인돼 있고 가려진 행이 남아 있으면 재로그인 없이 바로 "다시 조회" 노출
+    const prev = loadLoginResult();
+    const alreadyLoggedIn = !!(prev && (prev.lotteOk || prev.ssgOk));
+    if (refetchBtn) refetchBtn.hidden = !(alreadyLoggedIn && gatedRows.length);
     modal.hidden = false;
     const firstInput = showLotte ? li : si;
     setTimeout(() => firstInput?.focus(), 30);
@@ -144,10 +154,12 @@ let closeLoginModal = () => {};
     if (e.key === "Escape" && modal && !modal.hidden) closeLoginModal();
   });
 
-  // 결과 표의 "🔒 로그인 시" 클릭 → 해당 몰 로그인 모달
+  // 결과 표의 "🔒 로그인 시" 클릭 → 로그인이 필요한 면세점을 모두 모달에 표시
   document.addEventListener("click", (e) => {
     const hint = e.target.closest && e.target.closest(".login-hint.clickable");
-    if (hint) openLoginModal(hint.dataset.loginSite || "lotte");
+    if (!hint) return;
+    const sites = gatedShops.size ? [...gatedShops] : [hint.dataset.loginSite || "lotte"];
+    openLoginModal(sites);
   });
 
   reloginBtn?.addEventListener("click", async () => {
@@ -160,6 +172,7 @@ let closeLoginModal = () => {};
     reloginBtn.disabled = true;
     reloginBtn.textContent = "로그인 중…";
     if (loginStatus) loginStatus.hidden = true;
+    if (refetchBtn) refetchBtn.hidden = true;   // 로그인 재시도 시 이전 재조회 버튼 초기화
     try {
       const cc = loadCreds();
       const hdrs = {};
@@ -173,10 +186,10 @@ let closeLoginModal = () => {};
       const ssgOk = !!data.ssg_login;
       saveLoginResult(lotteOk, ssgOk);
       const anyOk = renderLoginResult(loginStatus, chip, { lotteOk, ssgOk });
-      if (anyOk) {
-        // 성공 → 잠시 후 모달 닫고, 할인율이 가려졌던 행만 자동 재조회
-        setTimeout(closeLoginModal, 700);
-        refreshGatedRows();
+      // 성공 & 재조회할 행이 있으면 모달을 닫지 않고 "다시 조회" 버튼을 노출
+      if (anyOk && refetchBtn && gatedRows.length) {
+        refetchBtn.hidden = false;
+        setTimeout(() => refetchBtn.focus(), 30);
       }
     } catch {
       if (loginStatus) {
@@ -187,6 +200,20 @@ let closeLoginModal = () => {};
     } finally {
       reloginBtn.disabled = false;
       reloginBtn.textContent = "로그인";
+    }
+  });
+
+  // "다시 조회" — 로그인 성공 후 가려졌던 행만 재조회하고 모달을 닫는다
+  refetchBtn?.addEventListener("click", async () => {
+    refetchBtn.disabled = true;
+    refetchBtn.textContent = "재조회 중…";
+    try {
+      await refreshGatedRows();
+    } finally {
+      refetchBtn.disabled = false;
+      refetchBtn.textContent = "다시 조회";
+      refetchBtn.hidden = true;
+      closeLoginModal();
     }
   });
 })();
@@ -219,8 +246,10 @@ clearBtn.addEventListener("click", () => {
 let exportRows = [];
 // 직전 조회 SKU 목록 — 몰 토글 시 자동 재조회에 사용
 let lastSkus = [];
-// 롯데 할인율이 로그인에 가려진 행들 [{sku, num}] — 로그인 성공 시 이 행만 재조회
+// 할인율이 로그인에 가려진 행들 [{sku, num}] — 로그인 성공 시 이 행만 재조회
 let gatedRows = [];
+// 현재 결과에서 로그인이 필요한 몰들("lotte"/"ssg") — "🔒 로그인 시" 클릭 시 모두 모달에 표시
+let gatedShops = new Set();
 // 조회 세대 토큰 — 재조회(refreshGatedRows) 도중 새 배치가 시작되면 옛 재조회를 중단
 let batchGeneration = 0;
 
@@ -259,6 +288,7 @@ async function runBatch(rows) {
   results.hidden = false;
   exportRows = [];
   gatedRows = [];
+  gatedShops = new Set();
   results.innerHTML = `
     <div class="results-toolbar">
       <button type="button" id="excel-btn" disabled>엑셀 다운로드</button>
@@ -319,8 +349,12 @@ async function runBatch(rows) {
       }
       tbody.insertAdjacentHTML("beforeend", tr);
       exportRows.push(extractExportRow(data, row));
-      // 롯데·신세계 할인율이 로그인에 가려진 행 기록 → 로그인 성공 시 이 행만 재조회
-      if (rowHasGatedShop(data)) gatedRows.push({ sku: row.sku, num: i + 1 });
+      // 롯데·신세계 할인율이 로그인에 가려진 행·몰 기록 → 로그인 성공 시 이 행만 재조회
+      const gs = gatedShopsOf(data);
+      if (gs.length) {
+        gatedRows.push({ sku: row.sku, num: i + 1 });
+        gs.forEach((s) => gatedShops.add(s));
+      }
     }
   } finally {
     prog.hidden = true;
@@ -335,13 +369,17 @@ function setBatchLoading(on) {
   batchBtn.disabled = on;
 }
 
-// 롯데·신세계 중 할인율이 로그인에 가려진 몰이 있으면 true (지연 로그인 대상 행)
-function rowHasGatedShop(data) {
+// 할인율이 로그인에 가려진 몰인가 (found·login_required·할인율 없음)
+function isGated(r) {
+  return !!(r && r.found && r.login_required && r.discount_rate == null);
+}
+// 이 행에서 로그인이 필요한 몰 목록(["lotte","ssg"] 중)
+function gatedShopsOf(data) {
   const shops = (data && data.shops) || {};
-  return ["롯데", "신세계"].some((s) => {
-    const r = shops[s];
-    return r && r.found && r.login_required && r.discount_rate == null;
-  });
+  const out = [];
+  if (isGated(shops["롯데"])) out.push("lotte");
+  if (isGated(shops["신세계"])) out.push("ssg");
+  return out;
 }
 
 // 로그인 성공 후: 할인율이 가려졌던 행만 재조회해 제자리에서 갱신(전체 재조회 회피)
@@ -355,6 +393,7 @@ async function refreshGatedRows() {
   if (creds.ssgId)   credHeaders["X-Ssg-Id"]   = creds.ssgId;
   if (creds.ssgPw)   credHeaders["X-Ssg-Pw"]   = creds.ssgPw;
   const still = [];
+  const newShops = new Set();
   for (const g of gatedRows) {
     if (gen !== batchGeneration) return;   // 새 배치가 시작됨 → 옛 재조회 중단(행 오염 방지)
     try {
@@ -366,14 +405,19 @@ async function refreshGatedRows() {
       const oldTr = document.getElementById(`cmp-row-${g.num}`);
       if (oldTr) oldTr.outerHTML = html;
       exportRows[g.num - 1] = extractExportRow(data, { sku: g.sku });
-      if (rowHasGatedShop(data)) {
+      const gs = gatedShopsOf(data);
+      if (gs.length) {
         still.push(g); // 여전히 가려짐(로그인 실패 등) → 다음 로그인 때 재시도
+        gs.forEach((s) => newShops.add(s));
       }
     } catch {
       still.push(g);
     }
   }
-  if (gen === batchGeneration) gatedRows = still;
+  if (gen === batchGeneration) {
+    gatedRows = still;
+    gatedShops = newShops;
+  }
 }
 
 function flashHint(msg) {
