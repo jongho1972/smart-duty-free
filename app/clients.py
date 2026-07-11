@@ -670,6 +670,7 @@ _SSG_EXTRACT_JS = r"""
       sale: t('.saleDollar'),
       cd,
       soldout: !!li.querySelector('.soldOut') || li.textContent.includes('품절'),
+      login: li.textContent.includes('로그인 후 할인율 확인'),  // 회원 할인가 게이팅(롯데와 동일 마커)
     });
   });
   return out;
@@ -796,12 +797,16 @@ class _SsgBrowser:
         origin = _num(r.get("origin"))
         sale = _num(r.get("sale"))
         rate = int(round((origin - sale) / origin * 100)) if origin and sale and origin > 0 else None
-        return Product(
+        p = Product(
             shop="신세계", brand=r.get("brand", ""), name=r.get("name", ""),
             price_origin=origin, price_sale=sale, discount_rate=rate,
             price_krw=None, url=SSG_DETAIL_LANG.format(lang=lang, cd=r.get("cd", "")),
             soldout=bool(r.get("soldout")),
         )
+        # 향수·화장품 등은 회원 할인가가 로그인에 가려짐("로그인 후 할인율 확인") → 지연 로그인 신호
+        if r.get("login") and rate is None:
+            setattr(p, "login_gated", True)
+        return p
 
 
 _ssg_browser = _SsgBrowser()

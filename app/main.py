@@ -213,6 +213,10 @@ async def compare(brand: str, product: str,
             shops[key]["krw_estimated"] = getattr(p, "krw_estimated", False)
     # 롯데 할인율이 로그인에 막혔으나 자격증명이 없어 정가만 나온 경우 UI 힌트
     shops["롯데"]["login_required"] = lotte_login_required
+    # 신세계도 향수·화장품 등은 할인가가 로그인에 가려짐 → 게이팅 시 UI 힌트
+    if ssg_lang:
+        shops["신세계"]["login_required"] = bool(
+            ssg and getattr(ssg, "login_gated", False) and ssg.discount_rate is None)
 
     errors = {
         "신라": isinstance(shilla_r, Exception),
@@ -323,6 +327,10 @@ async def compare_by_sku(sku: str,
         if p is not None:
             shops[key]["krw_estimated"] = getattr(p, "krw_estimated", False)
     shops["롯데"]["login_required"] = lotte_login_required
+    # 신세계도 향수·화장품 등은 할인가가 로그인에 가려짐 → 게이팅 시 UI 힌트
+    if ssg_lang:
+        shops["신세계"]["login_required"] = bool(
+            ssg and getattr(ssg, "login_gated", False) and ssg.discount_rate is None)
 
     errors = {
         "신라": False,

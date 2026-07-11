@@ -319,11 +319,8 @@ async function runBatch(rows) {
       }
       tbody.insertAdjacentHTML("beforeend", tr);
       exportRows.push(extractExportRow(data, row));
-      // 롯데 할인율이 로그인에 가려진 행 기록 → 로그인 성공 시 이 행만 재조회
-      const lotteShop = data.shops && data.shops["롯데"];
-      if (lotteShop && lotteShop.found && lotteShop.login_required && lotteShop.discount_rate == null) {
-        gatedRows.push({ sku: row.sku, num: i + 1 });
-      }
+      // 롯데·신세계 할인율이 로그인에 가려진 행 기록 → 로그인 성공 시 이 행만 재조회
+      if (rowHasGatedShop(data)) gatedRows.push({ sku: row.sku, num: i + 1 });
     }
   } finally {
     prog.hidden = true;
@@ -338,7 +335,16 @@ function setBatchLoading(on) {
   batchBtn.disabled = on;
 }
 
-// 롯데 로그인 성공 후: 할인율이 가려졌던 행만 재조회해 제자리에서 갱신(전체 재조회 회피)
+// 롯데·신세계 중 할인율이 로그인에 가려진 몰이 있으면 true (지연 로그인 대상 행)
+function rowHasGatedShop(data) {
+  const shops = (data && data.shops) || {};
+  return ["롯데", "신세계"].some((s) => {
+    const r = shops[s];
+    return r && r.found && r.login_required && r.discount_rate == null;
+  });
+}
+
+// 로그인 성공 후: 할인율이 가려졌던 행만 재조회해 제자리에서 갱신(전체 재조회 회피)
 async function refreshGatedRows() {
   if (!gatedRows.length) return;
   const gen = batchGeneration;   // 이 세대의 행만 갱신 — 새 배치가 시작되면 중단
@@ -360,8 +366,7 @@ async function refreshGatedRows() {
       const oldTr = document.getElementById(`cmp-row-${g.num}`);
       if (oldTr) oldTr.outerHTML = html;
       exportRows[g.num - 1] = extractExportRow(data, { sku: g.sku });
-      const lotteShop = data.shops && data.shops["롯데"];
-      if (lotteShop && lotteShop.found && lotteShop.login_required && lotteShop.discount_rate == null) {
+      if (rowHasGatedShop(data)) {
         still.push(g); // 여전히 가려짐(로그인 실패 등) → 다음 로그인 때 재시도
       }
     } catch {
