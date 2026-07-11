@@ -301,6 +301,8 @@ body.loading .btn-label { visibility: hidden; }
 .results-toolbar {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 10px;
 }
 #excel-btn {
@@ -455,3 +457,47 @@ footer.footnote a:hover { color: var(--navy-900); }
   .compare-table td.col-name,
   .compare-table td.col-sku { white-space: normal; }
 }
+
+/* ── 조회 몰 선택 토글 (KR/CN/EN/JP) ── */
+.mall-toggle {
+  display: inline-flex;
+  margin: 0;
+  background: var(--slate-050, #EEF2F6);
+  border: 1px solid var(--slate-100, #E5EAF0);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+.mall-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: transparent;
+  color: var(--slate-500, #64748B);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.mall-btn:hover { color: var(--slate-700, #334155); }
+.mall-btn.active {
+  background: #fff;
+  color: var(--navy-900, #0B2E5C);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.mall-note {
+  font-size: 0.78rem;
+  color: var(--slate-500, #64748B);
+  margin: -4px 0 10px;
+  text-align: right;
+}
+@media (max-width: 720px) {
+  .mall-toggle { width: 100%; justify-content: space-between; }
+  .mall-btn { flex: 1; justify-content: center; padding: 8px 8px; }
+}
+.mall-toggle[hidden] { display: none; }

@@ -2,6 +2,42 @@ const results = document.getElementById("results");
 const hint = document.getElementById("hint");
 const SHOP_ORDER = ["신라", "롯데", "신세계"];
 
+// ── 조회 몰 선택 (KR/CN/EN/JP) ─────────────────────────────────────────────
+let currentMall = "kr";
+const MALL_INFO = {
+  cn: "중문몰 기준으로 조회합니다 — 상품명은 중문으로 표시됩니다",
+  en: "영문몰 기준으로 조회합니다 — 상품명은 영문으로 표시됩니다",
+  jp: "일문몰 기준으로 조회합니다 — 상품명은 일문으로 표시되며, 신세계는 일문몰을 미운영합니다",
+};
+// 토글·안내문 DOM 노드 참조 — 결과 렌더 시 결과 툴바로 이동해 재사용(리스너 유지)
+const mallToggleEl = document.querySelector(".mall-toggle");
+const mallNoteEl = document.getElementById("mall-note");
+
+(function initMallToggle() {
+  const note = mallNoteEl;
+  document.querySelectorAll(".mall-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.mall === currentMall) return;
+      // 조회 진행 중 몰을 바꾸면 한 표에 몰이 섞이므로 전환을 막는다
+      if (document.body.classList.contains("loading")) return;
+      currentMall = btn.dataset.mall;
+      document.querySelectorAll(".mall-btn").forEach((b) => {
+        const on = b.dataset.mall === currentMall;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on);
+      });
+      if (note) {
+        note.textContent = MALL_INFO[currentMall] || "";
+        note.hidden = currentMall === "kr";
+      }
+      // 결과가 이미 있으면 같은 SKU 목록으로 해당 몰 자동 재조회
+      if (lastSkus.length) {
+        runBatch(lastSkus.map((sku) => ({ sku })));
+      }
+    });
+  });
+})();
+
 // ── 면세점 계정 관리 (sessionStorage) ──────────────────────────────────────
 function loadCreds() {
   return {
@@ -156,6 +192,8 @@ clearBtn.addEventListener("click", () => {
 
 // 엑셀(.xlsx) 다운로드용 누적 데이터 (면세점별 할인률+링크를 구조화해 보관)
 let exportRows = [];
+// 직전 조회 SKU 목록 — 몰 토글 시 자동 재조회에 사용
+let lastSkus = [];
 
 // 일괄 입력 파싱: 한 줄 = SKU 번호 하나
 function parseBatch(raw) {
@@ -178,7 +216,15 @@ batchForm.addEventListener("submit", async (e) => {
     rows = rows.slice(0, MAX_BATCH_ROWS);
     truncated = true;
   }
+  await runBatch(rows);
+  if (truncated) {
+    flashHint(`한 번에 최대 ${MAX_BATCH_ROWS}개까지만 비교합니다. 나머지는 다시 나눠 조회해 주세요.`);
+  }
+});
 
+// 실제 일괄 조회 실행 — 폼 제출과 몰 토글 자동 재조회가 공유
+async function runBatch(rows) {
+  lastSkus = rows.map((r) => r.sku);
   setBatchLoading(true);
   results.hidden = false;
   exportRows = [];
@@ -211,6 +257,12 @@ batchForm.addEventListener("submit", async (e) => {
   const tbody = results.querySelector("#compare-body");
   const excelBtn = results.querySelector("#excel-btn");
   excelBtn.addEventListener("click", downloadExcel);
+  // 몰 토글을 툴바의 엑셀 다운로드 버튼 왼쪽으로 이동해 노출
+  const toolbar = results.querySelector(".results-toolbar");
+  toolbar.insertBefore(mallToggleEl, excelBtn);
+  mallToggleEl.hidden = false;
+  toolbar.after(mallNoteEl);
+  mallNoteEl.hidden = currentMall === "kr";
   const prog = document.getElementById("batch-progress");
   prog.hidden = false;
 
@@ -220,7 +272,7 @@ batchForm.addEventListener("submit", async (e) => {
       prog.textContent = `조회 중… (${i + 1}/${rows.length}) SKU: ${row.sku}`;
       let tr, data = {};
       try {
-        const params = new URLSearchParams({ sku: row.sku });
+        const params = new URLSearchParams({ sku: row.sku, mall: currentMall });
         const creds = loadCreds();
         const credHeaders = {};
         if (creds.lotteId) credHeaders["X-Lotte-Id"] = creds.lotteId;
@@ -243,11 +295,7 @@ batchForm.addEventListener("submit", async (e) => {
     excelBtn.disabled = exportRows.length === 0;
     setBatchLoading(false);
   }
-
-  if (truncated) {
-    flashHint(`한 번에 최대 ${MAX_BATCH_ROWS}개까지만 비교합니다. 나머지는 다시 나눠 조회해 주세요.`);
-  }
-});
+}
 
 function setBatchLoading(on) {
   document.body.classList.toggle("loading", on);
@@ -270,6 +318,9 @@ function buildProductRow(data, row, num) {
 
   const rateCell = (shop) => {
     const r = shops[shop];
+    if (r && r.unsupported) {
+      return `<td data-label="${shop} 할인률" class="col-rate na">미운영</td>`;
+    }
     if (!r || !r.found) {
       return `<td data-label="${shop} 할인률" class="col-rate na">${errors[shop] ? "조회 실패" : "—"}</td>`;
     }
@@ -306,6 +357,7 @@ function extractExportRow(data, row) {
   const query = (data && data.query) || {};
   const cell = (s) => {
     const r = shops[s];
+    if (r && r.unsupported) return { rate: "미운영", url: null };
     if (!r || !r.found) return { rate: errors[s] ? "실패" : "", url: null };
     return {
       rate: r.discount_rate != null ? r.discount_rate + "%" : "",

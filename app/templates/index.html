@@ -99,6 +99,15 @@
 
     <p class="hint" id="hint">신라에서 SKU로 상품과 REF.NO를 확인 후, 롯데·신세계를 검색합니다 · 첫 조회는 준비 과정 때문에 다소 느릴 수 있어요.</p>
 
+    <!-- 몰 토글: 평소엔 숨김, 결과 렌더 시 결과 툴바(엑셀 다운로드 왼쪽)로 이동해 노출 -->
+    <div class="mall-toggle" role="group" aria-label="조회 몰 선택" hidden>
+      <button type="button" class="mall-btn active" data-mall="kr" aria-pressed="true">🇰🇷 KR몰</button>
+      <button type="button" class="mall-btn" data-mall="cn" aria-pressed="false">🇨🇳 CN몰</button>
+      <button type="button" class="mall-btn" data-mall="en" aria-pressed="false">🇺🇸 EN몰</button>
+      <button type="button" class="mall-btn" data-mall="jp" aria-pressed="false">🇯🇵 JP몰</button>
+    </div>
+    <p class="mall-note" id="mall-note" hidden></p>
+
     <section id="results" class="results" hidden></section>
   </main>
 

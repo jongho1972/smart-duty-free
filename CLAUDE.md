@@ -74,6 +74,22 @@ python -m uvicorn app.main:app --reload --port 8077
 - `_norm`은 영문·숫자·**한글**만 남긴다(한글 상품명 매칭 필수).
 - ※ 동명이브랜드 주의(`HUNTER` 아이웨어 vs 헌터 부츠) — 모델코드·상품 토큰 일치로 거른다.
 
+## 몰(언어) 선택 — KR/CN/EN/JP (2026-07-11)
+
+상단 토글로 조회 몰을 선택하면 3사 모두 해당 언어몰 기준으로 조회한다 (`/api/compare-by-sku?mall=`).
+SKU·REF.NO가 언어 공통이라 같은 상품이 몰만 바뀌어 잡힌다. `clients.MALLS`가 단일 소스.
+
+| 몰 | 신라 | 롯데 | 신세계 |
+|----|------|------|--------|
+| kr | m.shilladfs.com/estore/kr/ko | kor.lottedfs.com | ssgdfs.com/kr |
+| cn | m.shilladutyfree.cn/estore/kr/zh | **chn.lottedfs.cn** (.cn 도메인) | ssgdfs.com/cn |
+| en | …/kr/en | eng.lottedfs.com | ssgdfs.com/en |
+| jp | …/kr/ja | jpn.lottedfs.com | **미운영** (`ssg_lang=None` → UI "미운영") |
+
+- 롯데: 4개 몰 모두 `/kr/search?comSearchWord=` + `ol#unitStyleList` 동일 구조. **중문몰 할인 표기는 `4.7折` 형식**이라 외국몰은 할인율을 정가/판매가에서 직접 계산. 비로그인 마커("로그인 후 할인율 확인")는 국문이라 KR몰에서만 세션 만료 판정. 외국몰 `price03`은 현지통화라 KRW 환산에 사용 안 함.
+- 신세계: 언어몰도 같은 검색 폼(`#totalSearch`/`#search`) submit 방식으로 WAF 통과. 로그인은 KR 페이지에서 1회(세션 공유).
+- 매칭: 외국몰은 상품명 언어가 달라 영문 브랜드 우선 매칭 + REF.NO 정밀 검색(결과 ≤5)일 때 최상위 후보 채택 폴백.
+
 ## KRW 환산
 
 - 롯데는 사이트가 정확한 원화를 제공 → 그대로 사용.

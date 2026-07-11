@@ -27,6 +27,39 @@ UA = (
 )
 TIMEOUT = 20
 
+# ---------------------------------------------------------------------------
+# 몰(언어) 설정 — kr 국문몰 / cn 중문몰 / en 영문몰 / jp 일문몰
+#   신라: 별도 도메인(cn) 또는 언어 경로(en=/en, jp=/ja), API 구조 동일.
+#   롯데: 언어별 서브도메인(중문은 .cn 도메인), 검색 경로(/kr/search)·HTML 구조 동일.
+#   신세계: 언어 경로(/kr /cn /en), 일문몰 없음(ssg_lang=None).
+# ---------------------------------------------------------------------------
+MALLS = {
+    "kr": {
+        "shilla_base": "https://m.shilladfs.com/estore/kr/ko",
+        "lotte_base": "https://kor.lottedfs.com",
+        "ssg_lang": "kr",
+        "accept_language": "ko-KR,ko;q=0.9",
+    },
+    "cn": {
+        "shilla_base": "https://m.shilladutyfree.cn/estore/kr/zh",
+        "lotte_base": "https://chn.lottedfs.cn",
+        "ssg_lang": "cn",
+        "accept_language": "zh-CN,zh;q=0.9",
+    },
+    "en": {
+        "shilla_base": "https://m.shilladfs.com/estore/kr/en",
+        "lotte_base": "https://eng.lottedfs.com",
+        "ssg_lang": "en",
+        "accept_language": "en-US,en;q=0.9",
+    },
+    "jp": {
+        "shilla_base": "https://m.shilladfs.com/estore/kr/ja",
+        "lotte_base": "https://jpn.lottedfs.com",
+        "ssg_lang": None,   # 신세계는 일문몰 미운영
+        "accept_language": "ja-JP,ja;q=0.9",
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # 공통 데이터 모델
@@ -164,11 +197,14 @@ def best_match(products: list[Product], brand: str, product: str,
 # ---------------------------------------------------------------------------
 # 롯데인터넷면세점
 # ---------------------------------------------------------------------------
-LOTTE_SEARCH = (
-    "https://kor.lottedfs.com/kr/search?comSearchWord={kw}"
+LOTTE_SEARCH_PATH = (
+    "/kr/search?comSearchWord={kw}"
     "&comCollection=GOODS&comSort=RANK/DESC&comListCount=40"
 )
-LOTTE_DETAIL = "https://kor.lottedfs.com/kr/product/productDetail?prdNo={prd}&prdOptNo={opt}"
+LOTTE_DETAIL_PATH = "/kr/product/productDetail?prdNo={prd}&prdOptNo={opt}"
+# 하위 호환(로그인 검증 등 KR 고정 용도)
+LOTTE_SEARCH = "https://kor.lottedfs.com" + LOTTE_SEARCH_PATH
+LOTTE_DETAIL = "https://kor.lottedfs.com" + LOTTE_DETAIL_PATH
 
 
 def _num(s: str) -> Optional[float]:
@@ -359,17 +395,28 @@ def invalidate_lotte_login(cred_key: Optional[str] = None) -> None:
         _lotte_sessions.clear()
 
 
-def fetch_lotte(keyword: str, cookies: Optional[dict] = None, cred_key: Optional[str] = None) -> list[Product]:
-    url = LOTTE_SEARCH.format(kw=creq.utils.quote(keyword))
-    r = creq.get(url, headers={"User-Agent": UA}, impersonate="chrome",
-                 timeout=TIMEOUT, cookies=cookies or None)
+def fetch_lotte(keyword: str, cookies: Optional[dict] = None, cred_key: Optional[str] = None,
+                mall: str = "kr") -> list[Product]:
+    base = MALLS[mall]["lotte_base"]
+    url = base + LOTTE_SEARCH_PATH.format(kw=creq.utils.quote(keyword))
+    r = creq.get(url, headers={"User-Agent": UA,
+                               "Accept-Language": MALLS[mall]["accept_language"]},
+                 impersonate="chrome", timeout=TIMEOUT, cookies=cookies or None)
     r.raise_for_status()
     # 로그인 쿠키를 줬는데도 비로그인 문구가 보이면 세션 만료/실패 → 다음 호출 재로그인
-    if cookies and _LOTTE_LOGIN_MARKER in r.text:
+    # (마커는 국문 문구라 KR몰에서만 판정)
+    if mall == "kr" and cookies and _LOTTE_LOGIN_MARKER in r.text:
         invalidate_lotte_login(cred_key)
     soup = BeautifulSoup(r.text, "html.parser")
+    items = soup.select("ol#unitStyleList > li")
+    if cookies and not items:
+        # 만료된 세션 쿠키로 요청하면 검색 결과가 아닌 화면(리다이렉트 등)이 와
+        # 0건으로 파싱될 수 있다 → 세션 무효화 후 비로그인으로 1회 재시도
+        # (다음 조회부터는 ensure_lotte_login이 재로그인)
+        invalidate_lotte_login(cred_key)
+        return fetch_lotte(keyword, None, None, mall)
     out: list[Product] = []
-    for li in soup.select("ol#unitStyleList > li"):
+    for li in items:
         a = li.select_one("a.unit_link")
         if not a:
             continue
@@ -390,8 +437,13 @@ def fetch_lotte(keyword: str, cookies: Optional[dict] = None, cred_key: Optional
             txt = sale_el.get_text(" ", strip=True)
             m = re.search(r"\$[\d,.]+", txt)
             sale = _num(m.group()) if m else None
-        krw_el = li.select_one(".unit_price .price03")
+        # 현지통화 표기(price03)는 KR몰만 원화 → 외국몰은 KRW 환산에 쓰지 않음
+        krw_el = li.select_one(".unit_price .price03") if mall == "kr" else None
         krw = int(_num(krw_el.get_text())) if krw_el and _num(krw_el.get_text()) else None
+        # 외국몰은 할인 표기 형식이 다름(중문몰 "4.7折" 등) → 파싱값 버리고 가격에서 계산
+        if mall != "kr":
+            rate = int(round((origin - sale) / origin * 100)) \
+                if origin and sale and origin > 0 else None
         prd = a.get("data-prdno") or ""
         opt = ""
         oc = a.get("onclick", "")
@@ -402,7 +454,8 @@ def fetch_lotte(keyword: str, cookies: Optional[dict] = None, cred_key: Optional
         out.append(Product(
             shop="롯데", brand=brand, name=name,
             price_origin=origin, price_sale=sale, discount_rate=rate,
-            price_krw=krw, url=LOTTE_DETAIL.format(prd=prd, opt=opt), soldout=soldout,
+            price_krw=krw, url=base + LOTTE_DETAIL_PATH.format(prd=prd, opt=opt),
+            soldout=soldout,
         ))
     return out
 
@@ -415,10 +468,18 @@ SHILLA_AJAX = "https://m.shilladfs.com/estore/kr/ko/ajaxProducts"
 SHILLA_DETAIL = "https://m.shilladfs.com/estore/kr/ko/p/{code}"
 
 
-def fetch_shilla(keyword: str) -> list[Product]:
+def _shilla_urls(mall: str) -> tuple[str, str, str]:
+    """몰별 (검색페이지, ajax, 상세) URL 템플릿."""
+    base = MALLS[mall]["shilla_base"]
+    return (base + "/search?query={kw}", base + "/ajaxProducts", base + "/p/{code}")
+
+
+def fetch_shilla(keyword: str, mall: str = "kr") -> list[Product]:
+    search_page, ajax_url, detail_url = _shilla_urls(mall)
     sess = creq.Session(impersonate="chrome")
-    sess.headers.update({"User-Agent": UA})
-    page = sess.get(SHILLA_SEARCH_PAGE.format(kw=creq.utils.quote(keyword)), timeout=TIMEOUT)
+    sess.headers.update({"User-Agent": UA,
+                         "Accept-Language": MALLS[mall]["accept_language"]})
+    page = sess.get(search_page.format(kw=creq.utils.quote(keyword)), timeout=TIMEOUT)
     m = re.search(r"CSRFToken['\"\s:=]+([0-9a-f-]{36})", page.text)
     token = m.group(1) if m else ""
     body = {
@@ -429,7 +490,7 @@ def fetch_shilla(keyword: str) -> list[Product]:
         }, ensure_ascii=False),
         "CSRFToken": token,
     }
-    r = sess.post(SHILLA_AJAX, data=body,
+    r = sess.post(ajax_url, data=body,
                   headers={"X-Requested-With": "XMLHttpRequest"}, timeout=TIMEOUT)
     r.raise_for_status()
     data = r.json()
@@ -454,22 +515,25 @@ def fetch_shilla(keyword: str) -> list[Product]:
             price_sale=float(sale) if sale is not None else None,
             discount_rate=int(round(rate)) if rate is not None else None,
             price_krw=None,
-            url=SHILLA_DETAIL.format(code=code),
+            url=detail_url.format(code=code),
             soldout=soldout,
         ))
     return out
 
 
-def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
-    """SKU 번호로 신라 상품 정확 조회 (skuNo 완전 일치).
+def fetch_shilla_by_sku(sku: str, mall: str = "kr") -> tuple[Product | None, dict]:
+    """SKU 번호로 신라 상품 정확 조회 (skuNo 완전 일치, 몰 선택 가능).
 
     Returns: (Product | None, meta) where meta =
       {ref_no, brand_kr, brand_en, category, product_name}
     신라에서 상품 확정 후 ref_no 를 롯데·신세계 검색 키워드로 사용한다.
+    SKU·REF.NO는 몰(언어) 공통이라 외국몰에서도 동일하게 동작한다.
     """
+    search_page, ajax_url, detail_url = _shilla_urls(mall)
     sess = creq.Session(impersonate="chrome")
-    sess.headers.update({"User-Agent": UA})
-    page = sess.get(SHILLA_SEARCH_PAGE.format(kw=creq.utils.quote(sku)), timeout=TIMEOUT)
+    sess.headers.update({"User-Agent": UA,
+                         "Accept-Language": MALLS[mall]["accept_language"]})
+    page = sess.get(search_page.format(kw=creq.utils.quote(sku)), timeout=TIMEOUT)
     m = re.search(r"CSRFToken['\"\s:=]+([0-9a-f-]{36})", page.text)
     token = m.group(1) if m else ""
     body = {
@@ -480,7 +544,7 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
         }, ensure_ascii=False),
         "CSRFToken": token,
     }
-    r = sess.post(SHILLA_AJAX, data=body,
+    r = sess.post(ajax_url, data=body,
                   headers={"X-Requested-With": "XMLHttpRequest"}, timeout=TIMEOUT)
     r.raise_for_status()
     results = r.json().get("results", [])
@@ -492,7 +556,7 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
     code = hit.get("code", "")
     brand_cat = hit.get("brandCategory") or {}
     brand_kr = (hit.get("brandName") or brand_cat.get("brandName") or "").strip()
-    brand_en = (brand_cat.get("enName") or "").strip()
+    brand_en = (brand_cat.get("enName") or hit.get("brandEnName") or "").strip()
     product_name = (hit.get("productNameForDisp") or hit.get("name") or "").strip()
     ref_no = (hit.get("refNo") or "").strip()
     # 검색 API 응답의 "코드:카테고리명" 목록에서 카테고리명 추출 (2뎁스가 더 구체적이면 우선)
@@ -505,10 +569,10 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
             if category:
                 break
 
-    # 상세 페이지에서 영문 브랜드명 보완 (sku_lookup과 동일 로직) + 카테고리 미확보 시 breadcrumb 보조
-    if code:
+    # 상세 페이지에서 영문 브랜드명 보완 + 카테고리 breadcrumb 보조 (KR몰 전용 구조)
+    if code and mall == "kr":
         try:
-            dr = sess.get(SHILLA_DETAIL.format(code=code), timeout=TIMEOUT)
+            dr = sess.get(detail_url.format(code=code), timeout=TIMEOUT)
             soup = BeautifulSoup(dr.text, "html.parser")
             if not brand_en:
                 info_brand = soup.select_one("strong.info_brand")
@@ -542,7 +606,7 @@ def fetch_shilla_by_sku(sku: str) -> tuple[Product | None, dict]:
         price_sale=float(sale) if sale is not None else None,
         discount_rate=int(round(rate)) if rate is not None else None,
         price_krw=None,
-        url=SHILLA_DETAIL.format(code=code),
+        url=detail_url.format(code=code),
         soldout=soldout,
     )
     return product, {
@@ -563,6 +627,8 @@ SSG_HOME = "https://www.ssgdfs.com/kr/main/initMain"
 SSG_LOGIN = "https://www.ssgdfs.com/kr/login/login"
 SSG_SEARCH = "https://www.ssgdfs.com/kr/search/resultsTotal?startCount=0&query={kw}"
 SSG_DETAIL = "https://www.ssgdfs.com/kr/goos/initDetailGoos?goos_cd={cd}"
+SSG_HOME_LANG = "https://www.ssgdfs.com/{lang}/main/initMain"
+SSG_DETAIL_LANG = "https://www.ssgdfs.com/{lang}/goos/initDetailGoos?goos_cd={cd}"
 
 _SSG_EXTRACT_JS = r"""
 () => {
@@ -671,17 +737,20 @@ class _SsgBrowser:
             await page.close()
             self._logged_in = True  # 성공/실패 무관 1회만 시도(매 검색 재시도·캡차 잠금 방지)
 
-    async def search(self, keyword: str, sid: Optional[str] = None, spw: Optional[str] = None) -> list[Product]:
+    async def search(self, keyword: str, sid: Optional[str] = None, spw: Optional[str] = None,
+                     lang: str = "kr") -> list[Product]:
         # WAF가 직접 URL 진입을 차단하므로, 홈에서 검색 폼을 submit 해 결과로 이동한다.
+        # 언어몰(/cn /en)도 같은 폼 구조(#totalSearch, #search)를 쓴다.
         safe_kw = keyword.replace("\\", " ").replace("'", " ").strip()
+        home = SSG_HOME_LANG.format(lang=lang)
         async with self._lock:
             for attempt in range(2):
                 try:
                     await self._ensure()
-                    await self._ensure_login(sid, spw)  # 최초 1회 회원 로그인
+                    await self._ensure_login(sid, spw)  # 최초 1회 회원 로그인(KR 로그인 페이지)
                     page = await self._ctx.new_page()
                     try:
-                        await page.goto(SSG_HOME, wait_until="domcontentloaded", timeout=30000)
+                        await page.goto(home, wait_until="domcontentloaded", timeout=30000)
                         async with page.expect_navigation(
                                 wait_until="domcontentloaded", timeout=30000):
                             await page.evaluate(
@@ -694,20 +763,20 @@ class _SsgBrowser:
                         rows = await page.evaluate(_SSG_EXTRACT_JS)
                     finally:
                         await page.close()
-                    return [self._row_to_product(r) for r in rows]
+                    return [self._row_to_product(r, lang) for r in rows]
                 except Exception:
                     await self._reset()
             return []
 
     @staticmethod
-    def _row_to_product(r: dict) -> Product:
+    def _row_to_product(r: dict, lang: str = "kr") -> Product:
         origin = _num(r.get("origin"))
         sale = _num(r.get("sale"))
         rate = int(round((origin - sale) / origin * 100)) if origin and sale and origin > 0 else None
         return Product(
             shop="신세계", brand=r.get("brand", ""), name=r.get("name", ""),
             price_origin=origin, price_sale=sale, discount_rate=rate,
-            price_krw=None, url=SSG_DETAIL.format(cd=r.get("cd", "")),
+            price_krw=None, url=SSG_DETAIL_LANG.format(lang=lang, cd=r.get("cd", "")),
             soldout=bool(r.get("soldout")),
         )
 
@@ -715,8 +784,9 @@ class _SsgBrowser:
 _ssg_browser = _SsgBrowser()
 
 
-async def fetch_ssg_async(keyword: str, sid: Optional[str] = None, spw: Optional[str] = None) -> list[Product]:
-    return await _ssg_browser.search(keyword, sid, spw)
+async def fetch_ssg_async(keyword: str, sid: Optional[str] = None, spw: Optional[str] = None,
+                          lang: str = "kr") -> list[Product]:
+    return await _ssg_browser.search(keyword, sid, spw, lang)
 
 
 def fetch_ssg(keyword: str) -> list[Product]:

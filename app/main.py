@@ -117,7 +117,11 @@ def _result_block(shop: str, p) -> dict:
 
 async def compare(brand: str, product: str,
                   lotte_id: str = "", lotte_pw: str = "",
-                  ssg_id: str = "", ssg_pw: str = "") -> dict:
+                  ssg_id: str = "", ssg_pw: str = "",
+                  mall: str = "kr") -> dict:
+    if mall not in clients.MALLS:
+        return {"error": "mall은 kr·cn·en·jp만 지원합니다."}
+    ssg_lang = clients.MALLS[mall]["ssg_lang"]
     keyword = choose_keyword(brand, product)
     if not keyword:
         return {"error": "브랜드명 또는 상품명을 입력해 주세요."}
@@ -126,9 +130,14 @@ async def compare(brand: str, product: str,
     lotte_cookies, lotte_cred_key = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
 
     # 롯데/신라는 동기(curl_cffi) → 스레드, 신세계는 async(Playwright)
-    lotte_t = asyncio.to_thread(clients.fetch_lotte, keyword, lotte_cookies, lotte_cred_key)
-    shilla_t = asyncio.to_thread(clients.fetch_shilla, keyword)
-    ssg_t = clients.fetch_ssg_async(keyword, ssg_id or None, ssg_pw or None)
+    lotte_t = asyncio.to_thread(clients.fetch_lotte, keyword, lotte_cookies, lotte_cred_key, mall)
+    shilla_t = asyncio.to_thread(clients.fetch_shilla, keyword, mall)
+    if ssg_lang:
+        ssg_t = clients.fetch_ssg_async(keyword, ssg_id or None, ssg_pw or None, ssg_lang)
+    else:
+        async def _no_ssg():
+            return []
+        ssg_t = _no_ssg()
     lotte_r, shilla_r, ssg_r = await asyncio.gather(
         lotte_t, shilla_t, ssg_t, return_exceptions=True)
 
@@ -157,6 +166,8 @@ async def compare(brand: str, product: str,
         "롯데": _result_block("롯데", lotte),
         "신세계": _result_block("신세계", ssg),
     }
+    if not ssg_lang:
+        shops["신세계"] = {"shop": "신세계", "found": False, "unsupported": True}
     # krw_estimated 플래그 반영
     for key, p in (("신라", shilla), ("신세계", ssg)):
         if p is not None:
@@ -165,11 +176,11 @@ async def compare(brand: str, product: str,
     errors = {
         "신라": isinstance(shilla_r, Exception),
         "롯데": isinstance(lotte_r, Exception),
-        "신세계": isinstance(ssg_r, Exception),
+        "신세계": bool(ssg_lang) and isinstance(ssg_r, Exception),
     }
 
     return {
-        "query": {"brand": brand, "product": product, "keyword": keyword},
+        "query": {"brand": brand, "product": product, "keyword": keyword, "mall": mall},
         "shops": shops,
         "errors": errors,
         "exchange_rate": round(rate, 2),
@@ -181,22 +192,36 @@ async def api_compare(
     request: Request,
     brand: str = Query("", description="브랜드명"),
     product: str = Query("", description="상품명/모델"),
+    mall: str = Query("kr", description="조회 몰 (kr/cn/en/jp)"),
 ):
     creds = _extract_creds(request)
-    return JSONResponse(await compare(brand.strip(), product.strip(), **creds))
+    return JSONResponse(await compare(brand.strip(), product.strip(),
+                                      mall=mall.strip().lower() or "kr", **creds))
 
 
 async def compare_by_sku(sku: str,
                           lotte_id: str = "", lotte_pw: str = "",
-                          ssg_id: str = "", ssg_pw: str = "") -> dict:
-    """SKU 번호 → 신라에서 정확 조회 → REF.NO로 롯데·신세계 검색."""
-    shilla_product, meta = await asyncio.to_thread(clients.fetch_shilla_by_sku, sku)
+                          ssg_id: str = "", ssg_pw: str = "",
+                          mall: str = "kr") -> dict:
+    """SKU 번호 → 신라에서 정확 조회 → REF.NO로 롯데·신세계 검색.
+
+    mall(kr/cn/en/jp) 선택 시 3사 모두 해당 언어몰 기준으로 조회한다.
+    SKU·REF.NO는 언어 공통이라 몰이 달라도 같은 상품이 잡힌다.
+    신세계는 일문몰이 없어 mall=jp 에서 미지원 처리.
+    """
+    if mall not in clients.MALLS:
+        return {"error": "mall은 kr·cn·en·jp만 지원합니다."}
+    ssg_lang = clients.MALLS[mall]["ssg_lang"]
+
+    shilla_product, meta = await asyncio.to_thread(clients.fetch_shilla_by_sku, sku, mall)
 
     if shilla_product is None:
-        return {"error": f"신라 면세점에서 SKU {sku}를 찾을 수 없습니다."}
+        mall_label = {"kr": "국문몰", "cn": "중문몰", "en": "영문몰", "jp": "일문몰"}[mall]
+        return {"error": f"신라 {mall_label}에서 SKU {sku}를 찾을 수 없습니다."}
 
     ref_no = meta.get("ref_no", "")
     brand_kr = meta.get("brand_kr", "")
+    brand_en = meta.get("brand_en", "")
     product_name = meta.get("product_name", "")
     search_kw = ref_no or choose_keyword(brand_kr, product_name)
 
@@ -204,14 +229,26 @@ async def compare_by_sku(sku: str,
         return {"error": "검색 키워드를 추출할 수 없습니다."}
 
     lotte_cookies, lotte_cred_key = await clients.ensure_lotte_login(lotte_id or None, lotte_pw or None)
-    lotte_t = asyncio.to_thread(clients.fetch_lotte, search_kw, lotte_cookies, lotte_cred_key)
-    ssg_t = clients.fetch_ssg_async(search_kw, ssg_id or None, ssg_pw or None)
+    lotte_t = asyncio.to_thread(clients.fetch_lotte, search_kw, lotte_cookies, lotte_cred_key, mall)
+    if ssg_lang:
+        ssg_t = clients.fetch_ssg_async(search_kw, ssg_id or None, ssg_pw or None, ssg_lang)
+    else:
+        async def _no_ssg():
+            return []
+        ssg_t = _no_ssg()
     lotte_r, ssg_r = await asyncio.gather(lotte_t, ssg_t, return_exceptions=True)
+
+    # 외국몰 결과는 상품명 언어가 달라 토큰 매칭이 약함 → 영문 브랜드 우선 사용,
+    # 그래도 못 잡으면 REF.NO 정밀 검색(결과 소수)일 때 최상위 후보를 채택.
+    match_brand = brand_kr if mall == "kr" else (brand_en or brand_kr)
 
     def pick(res):
         if isinstance(res, Exception) or not res:
             return None
-        return clients.best_match(res, brand_kr, product_name, search_kw)
+        m = clients.best_match(res, match_brand, product_name, search_kw)
+        if m is None and mall != "kr" and search_kw == ref_no and len(res) <= 5:
+            m = next((p for p in res if not p.soldout), res[0])
+        return m
 
     lotte = pick(lotte_r)
     ssg = pick(ssg_r)
@@ -230,6 +267,8 @@ async def compare_by_sku(sku: str,
         "롯데": _result_block("롯데", lotte),
         "신세계": _result_block("신세계", ssg),
     }
+    if not ssg_lang:
+        shops["신세계"] = {"shop": "신세계", "found": False, "unsupported": True}
     for key, p in (("신라", shilla_product), ("신세계", ssg)):
         if p is not None:
             shops[key]["krw_estimated"] = getattr(p, "krw_estimated", False)
@@ -237,7 +276,7 @@ async def compare_by_sku(sku: str,
     errors = {
         "신라": False,
         "롯데": isinstance(lotte_r, Exception),
-        "신세계": isinstance(ssg_r, Exception),
+        "신세계": bool(ssg_lang) and isinstance(ssg_r, Exception),
     }
 
     return {
@@ -245,10 +284,11 @@ async def compare_by_sku(sku: str,
             "sku": sku,
             "ref_no": ref_no,
             "brand": brand_kr,
-            "brand_en": meta.get("brand_en", ""),
+            "brand_en": brand_en,
             "category": meta.get("category", ""),
             "product": product_name,
             "keyword": search_kw,
+            "mall": mall,
         },
         "shops": shops,
         "errors": errors,
@@ -260,9 +300,10 @@ async def compare_by_sku(sku: str,
 async def api_compare_by_sku(
     request: Request,
     sku: str = Query("", description="SKU 번호"),
+    mall: str = Query("kr", description="조회 몰 (kr/cn/en/jp)"),
 ):
     creds = _extract_creds(request)
-    return JSONResponse(await compare_by_sku(sku.strip(), **creds))
+    return JSONResponse(await compare_by_sku(sku.strip(), mall=mall.strip().lower() or "kr", **creds))
 
 
 EXPORT_HEADERS = [
