@@ -159,7 +159,7 @@ body.loading .btn-label { visibility: hidden; }
 .hint { color: var(--slate-500); font-size: var(--fs-caption); margin: 16px 4px 0; }
 
 /* ---------- 면세점 계정 설정 패널 ---------- */
-/* 상단 로그인 바 (상시 노출은 버튼/배지뿐, 입력은 모달) */
+/* 상단 로그인 상태 칩 바 (입력은 모달). 칩이 숨김이면 여백도 접는다. */
 .login-bar {
   display: flex;
   justify-content: flex-end;
@@ -167,19 +167,7 @@ body.loading .btn-label { visibility: hidden; }
   gap: 10px;
   margin-bottom: 12px;
 }
-.login-trigger {
-  font-family: inherit;
-  font-weight: 700;
-  font-size: var(--fs-caption);
-  color: var(--slate-700);
-  background: #fff;
-  border: 1.5px solid var(--slate-200);
-  border-radius: 8px;
-  padding: 7px 14px;
-  cursor: pointer;
-  transition: background .15s, border-color .15s;
-}
-.login-trigger:hover { background: var(--blue-025); border-color: var(--blue-500); }
+.login-bar:has(> #login-chip[hidden]) { margin-bottom: 0; }
 
 /* 로그인 모달 */
 .login-modal-backdrop {

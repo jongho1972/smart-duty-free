@@ -46,8 +46,8 @@ python -m uvicorn app.main:app --reload --port 8077
 - 판정 흐름: ① `peek_lotte_session`으로 로그인 유발 없이 캐시 세션 확인(있으면 그 쿠키로 바로 조회) → ② 비로그인 조회 → ③ 미보유(`best_match None`)·마커 없음·할인율 이미 노출이면 **로그인 스킵** → ④ 매칭됐고 할인율 가려짐(`_LOTTE_LOGIN_MARKER`)일 때만 `ensure_lotte_login` 후 재조회. 자격증명 없으면 정가만 반환 + UI "🔒 로그인 시" 힌트(`login_required`).
 
 ### 로그인 UI — 온디맨드 모달 (상시 패널 폐기)
-- 상단 상시 로그인 패널을 제거하고, 평소엔 **"🔑 면세점 로그인" 버튼 + 상태 칩(`#login-chip`)**만 노출. 실제 입력은 숨김 **모달(`#login-modal`)**.
-- 할인율이 가려진 행(`login_required`)의 "🔒 로그인 시"가 **클릭 가능** → **현재 결과에서 로그인이 필요한 몰 전부**를 모달에 표시(`openLoginModal(sites)`, sites="all"|"lotte"|"ssg"|배열, `.cred-row[data-site]` 토글). 필요 몰 집합은 `gatedShops`(Set)로 추적. 상단 "🔑 면세점 로그인" 버튼은 `all`.
+- 상단 상시 로그인 패널·수동 로그인 버튼을 모두 제거. 상단엔 **로그인 상태 칩(`#login-chip`)만**(로그인 전엔 숨김 → `.login-bar`도 `:has()`로 여백 접힘). 실제 입력은 숨김 **모달(`#login-modal`)**. 로그인 진입점은 오직 결과표 "🔒 로그인 시" 힌트.
+- 할인율이 가려진 행(`login_required`)의 "🔒 로그인 시"가 **클릭 가능** → **현재 결과에서 로그인이 필요한 몰 전부**를 모달에 표시(`openLoginModal(sites)`, sites="all"|"lotte"|"ssg"|배열, `.cred-row[data-site]` 토글). 필요 몰 집합은 `gatedShops`(Set)로 추적.
 - 로그인 성공(`/api/login-reset`) 후 **모달에 "다시 조회"(`#cred-refetch-btn`) 버튼 노출**(자동 닫기·자동 재조회 아님) → 클릭 시 `refreshGatedRows()`가 **가려졌던 행만 제자리 재조회**(전체 재조회 회피, `cmp-row-${num}`+`exportRows[num-1]` 동기화, 세대 토큰 `batchGeneration`으로 새 배치와의 레이스 차단) 후 모달 닫음. 이미 로그인된 상태로 모달을 다시 열면 재로그인 없이 바로 "다시 조회"가 뜬다. 게이팅 판정 `gatedShopsOf`는 롯데·신세계 둘 다 검사.
 - **신세계도 롯데와 동일하게 게이팅**: 향수·화장품 등은 회원 할인가를 로그인으로 가리고 카드에 롯데와 같은 `로그인 후 할인율 확인` 마커를 노출(주류는 익명으로 할인 노출). `_SSG_EXTRACT_JS`가 마커를 잡아 `_row_to_product`에서 `login_gated` 설정 → `login_required` 실림 → "🔒 로그인 시"(data-login-site=ssg) 클릭 시 신세계 모달. ⚠️ "신세계는 익명으로 다 나온다"는 주류만 본 오판이었고 향수 케이스(예 SKU 084613000114 / REF L41501)로 정정.
 - 신세계 로그인은 Playwright 회원 로그인(`_ensure_login`, KISA 폼)이라 SSG 자격증명 필요(env 폴백 없음). 자격증명은 sessionStorage(탭 한정) + X-Lotte-*/X-Ssg-* 헤더.

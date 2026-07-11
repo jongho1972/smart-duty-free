@@ -100,7 +100,6 @@ let closeLoginModal = () => {};
   const c = loadCreds();
   const modal = document.getElementById("login-modal");
   const chip = document.getElementById("login-chip");
-  const openBtn = document.getElementById("login-open-btn");
   const closeBtn = document.getElementById("login-close-btn");
   const desc = document.getElementById("login-modal-desc");
   const li = document.getElementById("lotte-id");
@@ -147,7 +146,6 @@ let closeLoginModal = () => {};
   };
   closeLoginModal = () => { modal.hidden = true; };
 
-  openBtn?.addEventListener("click", () => openLoginModal("all"));
   closeBtn?.addEventListener("click", closeLoginModal);
   modal?.addEventListener("click", (e) => { if (e.target === modal) closeLoginModal(); });
   document.addEventListener("keydown", (e) => {
