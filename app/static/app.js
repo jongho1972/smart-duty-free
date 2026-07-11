@@ -13,23 +13,27 @@ const MALL_INFO = {
 const mallToggleEl = document.querySelector(".mall-toggle");
 const mallNoteEl = document.getElementById("mall-note");
 
+// 몰 상태(currentMall + 토글 버튼 + 안내문) 갱신 — 재조회는 호출부에서 별도 처리
+function applyMallState(mall) {
+  currentMall = mall;
+  document.querySelectorAll(".mall-btn").forEach((b) => {
+    const on = b.dataset.mall === mall;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", on);
+  });
+  if (mallNoteEl) {
+    mallNoteEl.textContent = MALL_INFO[mall] || "";
+    mallNoteEl.hidden = mall === "kr";
+  }
+}
+
 (function initMallToggle() {
-  const note = mallNoteEl;
   document.querySelectorAll(".mall-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (btn.dataset.mall === currentMall) return;
       // 조회 진행 중 몰을 바꾸면 한 표에 몰이 섞이므로 전환을 막는다
       if (document.body.classList.contains("loading")) return;
-      currentMall = btn.dataset.mall;
-      document.querySelectorAll(".mall-btn").forEach((b) => {
-        const on = b.dataset.mall === currentMall;
-        b.classList.toggle("active", on);
-        b.setAttribute("aria-pressed", on);
-      });
-      if (note) {
-        note.textContent = MALL_INFO[currentMall] || "";
-        note.hidden = currentMall === "kr";
-      }
+      applyMallState(btn.dataset.mall);
       // 결과가 이미 있으면 같은 SKU 목록으로 해당 몰 자동 재조회
       if (lastSkus.length) {
         runBatch(lastSkus.map((sku) => ({ sku })));
@@ -181,9 +185,13 @@ clearBtn.addEventListener("click", () => {
   batchInput.focus();
 });
 
-// ?skus=sku1,sku2,... 파라미터로 진입 시 입력만 채우고 조회는 사용자가 직접 실행
+// ?skus=sku1,sku2,...&mall=cn 파라미터로 진입 시 몰을 디폴트로 세팅하고
+// 입력만 채운다(조회는 사용자가 직접 실행 — SKU 조회 사이트에서 넘어온 경우 등)
 (function () {
-  const skusParam = new URLSearchParams(location.search).get("skus");
+  const q = new URLSearchParams(location.search);
+  const mallParam = (q.get("mall") || "").toLowerCase();
+  if (Object.keys(MALL_INFO).includes(mallParam)) applyMallState(mallParam);
+  const skusParam = q.get("skus");
   if (!skusParam) return;
   const skus = skusParam.split(",").map((s) => s.trim()).filter(Boolean);
   if (!skus.length) return;
