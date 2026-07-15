@@ -1,3 +1,7 @@
+/* HTML hidden 속성이 항상 우선하도록 강제(.login-cta·.mall-toggle 등이 display:flex를
+   지정해 hidden(=display:none)을 덮어쓰는 문제 방지). JS의 el.hidden 토글이 시각적으로도 동작. */
+[hidden] { display: none !important; }
+
 :root {
   /* 항공편수·출국객수 대시보드와 동일 팔레트(네이비/슬레이트) */
   --navy-900: #0B2E5C;
