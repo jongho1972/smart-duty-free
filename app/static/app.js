@@ -445,6 +445,8 @@ function buildProductRow(data, row, num) {
   const shops = data.shops || {};
   const errors = data.errors || {};
   const query = data.query || {};
+  // 신라 열세 강조 기준: 신라 할인율(있을 때만). 경쟁사가 이보다 높으면 그 셀을 강조.
+  const shillaRate = shops["신라"] && shops["신라"].found ? shops["신라"].discount_rate : null;
 
   const rateCell = (shop) => {
     const r = shops[shop];
@@ -464,7 +466,12 @@ function buildProductRow(data, row, num) {
     }
     const rate = r.discount_rate != null ? r.discount_rate + "%" : "—";
     const soldout = r.soldout ? ` <span class="soldout-tag" title="해당 면세점 품절">품절</span>` : "";
-    return `<td data-label="${shop} 할인률" class="col-rate"><span class="rate">${rate}</span>${soldout}</td>`;
+    // 경쟁사(롯데·신세계)가 신라보다 할인율이 높은 셀 = 신라 열세 → 빨강 강조
+    const behind = shop !== "신라" && shillaRate != null
+      && r.discount_rate != null && r.discount_rate > shillaRate;
+    const cls = behind ? "col-rate behind" : "col-rate";
+    const tip = behind ? ` title="신라보다 ${r.discount_rate - shillaRate}%p 높음 — 신라 열세"` : "";
+    return `<td data-label="${shop} 할인률" class="${cls}"${tip}><span class="rate">${rate}</span>${soldout}</td>`;
   };
 
   const links = SHOP_ORDER
