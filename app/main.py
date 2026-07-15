@@ -430,8 +430,11 @@ async def api_export(payload: dict = Body(default={})):
 
 @app.get("/")
 async def index(request: Request):
+    # HTML 셸은 캐시하지 않고 매번 재검증 → 배포 후 항상 최신 ?v= 정적 자산을 받는다
+    # (정적 파일은 ?v=mtime로 버전 고정되므로 브라우저 캐시를 그대로 활용).
     return templates.TemplateResponse(
-        request, "index.html", {"v": ASSET_VERSION})
+        request, "index.html", {"v": ASSET_VERSION},
+        headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 @app.get("/healthz")
