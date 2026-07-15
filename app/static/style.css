@@ -438,7 +438,6 @@ tbody tr:last-child { border-bottom: none; }
 /* 신라 열세 강조: 경쟁사 할인율이 신라보다 높은 셀 */
 .col-rate.behind {
   background: #fbe9ea;
-  box-shadow: inset 3px 0 0 #d64550;
   cursor: help;
 }
 .col-rate.behind .rate { color: #99202a; font-weight: 700; }
