@@ -34,9 +34,11 @@ function applyMallState(mall) {
       // 조회 진행 중 몰을 바꾸면 한 표에 몰이 섞이므로 전환을 막는다
       if (document.body.classList.contains("loading")) return;
       applyMallState(btn.dataset.mall);
-      // 결과가 이미 있으면 같은 SKU 목록으로 해당 몰 자동 재조회
+      // 결과가 이미 있으면: 캐시된 몰이면 즉시 복원, 아니면 해당 몰로 조회
       if (lastSkus.length) {
-        runBatch(lastSkus.map((sku) => ({ sku })));
+        const snap = mallCache[mallCacheKey(currentMall, lastSkus)];
+        if (snap) restoreMallCache(snap);
+        else runBatch(lastSkus.map((sku) => ({ sku })));
       }
     });
   });
@@ -251,6 +253,12 @@ let gatedShops = new Set();
 // 조회 세대 토큰 — 재조회(refreshGatedRows) 도중 새 배치가 시작되면 옛 재조회를 중단
 let batchGeneration = 0;
 
+// 몰별 결과 캐시 — 이미 조회한 몰로 토글하면 재조회 없이 즉시 복원(KR↔CN↔KR 반복 재조회 방지).
+// key = `${mall}|${skus.join(',')}`. 새 조회(폼 제출)·로그인 후 재조회 시 무효화.
+const mallCache = {};
+function mallCacheKey(mall, skus) { return mall + "|" + skus.join(","); }
+function clearMallCache() { for (const k of Object.keys(mallCache)) delete mallCache[k]; }
+
 // 일괄 입력 파싱: 한 줄 = SKU 번호 하나
 function parseBatch(raw) {
   return (raw || "")
@@ -272,6 +280,7 @@ batchForm.addEventListener("submit", async (e) => {
     rows = rows.slice(0, MAX_BATCH_ROWS);
     truncated = true;
   }
+  clearMallCache();   // 새 조회 → 이전 SKU 세트의 몰 캐시 폐기
   await runBatch(rows);
   if (truncated) {
     flashHint(`한 번에 최대 ${MAX_BATCH_ROWS}개까지만 비교합니다. 나머지는 다시 나눠 조회해 주세요.`);
@@ -372,7 +381,29 @@ async function runBatch(rows) {
     excelBtn.disabled = exportRows.length === 0;
     setBatchLoading(false);
     updateLoginCta();
+    // 이 몰 결과를 캐시 → 나중에 같은 SKU로 이 몰에 토글하면 재조회 없이 복원
+    mallCache[mallCacheKey(currentMall, lastSkus)] = {
+      html: tbody.innerHTML,
+      exportRows: exportRows.slice(),
+      gatedRows: gatedRows.slice(),
+      gatedShops: [...gatedShops],
+    };
   }
+}
+
+// 캐시된 몰 결과를 재조회 없이 즉시 복원(토글 전환용)
+function restoreMallCache(snap) {
+  batchGeneration++;   // 진행 중이던 옛 재조회가 이 화면을 건드리지 못하게 세대 증가
+  results.hidden = false;
+  exportRows = snap.exportRows.slice();
+  gatedRows = snap.gatedRows.slice();
+  gatedShops = new Set(snap.gatedShops);
+  const tbody = results.querySelector("#compare-body");
+  if (tbody) tbody.innerHTML = snap.html;
+  const excelBtn = results.querySelector("#excel-btn");
+  if (excelBtn) excelBtn.disabled = exportRows.length === 0;
+  mallNoteEl.hidden = currentMall === "kr";
+  updateLoginCta();
 }
 
 // 가려진 몰(gatedShops) 중 아직 로그인 성공하지 않은 몰만 반환 — 배너·모달 대상
@@ -449,6 +480,17 @@ async function refreshGatedRows() {
     gatedRows = still;
     gatedShops = newShops;
     updateLoginCta();   // 재조회로 로그인 풀린 몰이 있으면 배너 숨김/갱신
+    clearMallCache();   // 로그인으로 결과가 바뀜 → 몰 캐시 폐기(토글 시 최신 재조회)
+    // 현재 몰의 갱신된 결과는 다시 캐시해 둔다(같은 몰 재토글 시 재조회 회피)
+    const tbody = results.querySelector("#compare-body");
+    if (tbody) {
+      mallCache[mallCacheKey(currentMall, lastSkus)] = {
+        html: tbody.innerHTML,
+        exportRows: exportRows.slice(),
+        gatedRows: gatedRows.slice(),
+        gatedShops: [...gatedShops],
+      };
+    }
   }
 }
 
