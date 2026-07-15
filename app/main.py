@@ -471,30 +471,13 @@ async def api_login_reset(request: Request):
     return JSONResponse({"ssg_login": ssg_ok, "lotte_login": lotte_ok, "lotte_dbg": lotte_dbg})
 
 
+# 타사 로그인 정보를 받는 실무 전용 도구 → 검색엔진 색인을 전면 차단한다.
 _ROBOTS_TXT = (
     "User-agent: *\n"
-    "Allow: /\n"
-    "Disallow: /api/\n\n"
-    "Sitemap: https://dfprice.jhawk.kr/sitemap.xml\n"
-)
-
-_SITEMAP_XML = (
-    '<?xml version="1.0" encoding="UTF-8"?>\n'
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    "  <url>\n"
-    "    <loc>https://dfprice.jhawk.kr/</loc>\n"
-    "    <changefreq>weekly</changefreq>\n"
-    "    <priority>1.0</priority>\n"
-    "  </url>\n"
-    "</urlset>\n"
+    "Disallow: /\n"
 )
 
 
 @app.get("/robots.txt", include_in_schema=False)
 async def robots_txt():
     return Response(_ROBOTS_TXT, media_type="text/plain")
-
-
-@app.get("/sitemap.xml", include_in_schema=False)
-async def sitemap_xml():
-    return Response(_SITEMAP_XML, media_type="application/xml")

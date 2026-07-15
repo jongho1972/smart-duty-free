@@ -288,6 +288,10 @@ async function runBatch(rows) {
   gatedRows = [];
   gatedShops = new Set();
   results.innerHTML = `
+    <div class="login-cta" id="login-cta" hidden>
+      <span class="login-cta-msg">🔒 <b>롯데·신세계 할인율</b>은 회원 로그인 후 표시됩니다.</span>
+      <button type="button" id="login-cta-btn">로그인하고 전체 비교</button>
+    </div>
     <div class="results-toolbar">
       <button type="button" id="excel-btn" disabled>엑셀 다운로드</button>
     </div>
@@ -324,6 +328,14 @@ async function runBatch(rows) {
   mallNoteEl.hidden = currentMall === "kr";
   const prog = document.getElementById("batch-progress");
   prog.hidden = false;
+  // 로그인 유도 배너: 클릭 시 현재 가려진 몰을 모달에 표시
+  const cta = results.querySelector("#login-cta");
+  const ctaBtn = results.querySelector("#login-cta-btn");
+  ctaBtn?.addEventListener("click", () => {
+    openLoginModal(gatedShops.size ? [...gatedShops] : "all");
+  });
+  // 결과가 입력폼·안내문 아래 멀리 렌더되므로 조회 시작과 함께 결과로 스크롤
+  results.scrollIntoView({ behavior: "smooth", block: "start" });
 
   try {
     for (let i = 0; i < rows.length; i++) {
@@ -359,6 +371,8 @@ async function runBatch(rows) {
     prog.textContent = "";
     excelBtn.disabled = exportRows.length === 0;
     setBatchLoading(false);
+    // 가려진 몰이 남아 있으면 로그인 유도 배너 노출(이미 로그인해도 남은 행이 있으면 유지)
+    if (cta) cta.hidden = gatedShops.size === 0;
   }
 }
 
@@ -438,7 +452,10 @@ function buildProductRow(data, row, num) {
       return `<td data-label="${shop} 할인률" class="col-rate na">미운영</td>`;
     }
     if (!r || !r.found) {
-      return `<td data-label="${shop} 할인률" class="col-rate na">${errors[shop] ? "조회 실패" : "—"}</td>`;
+      // 실제 예외(조회 오류)와 미취급/판매종료(상품 못 찾음)를 구분해 표기
+      return errors[shop]
+        ? `<td data-label="${shop} 할인률" class="col-rate na err" title="일시적인 조회 오류입니다. 잠시 후 다시 시도해 주세요.">조회 오류</td>`
+        : `<td data-label="${shop} 할인률" class="col-rate na" title="${shop}에서 이 상품을 찾지 못했습니다 (미취급이거나 판매 종료).">미취급</td>`;
     }
     // 할인율이 로그인에 막혔고 자격증명이 없어 정가만 온 경우 → 클릭 시 해당 몰 로그인 모달
     if (r.discount_rate == null && r.login_required) {
@@ -446,7 +463,8 @@ function buildProductRow(data, row, num) {
       return `<td data-label="${shop} 할인률" class="col-rate na"><span class="login-hint clickable" data-login-site="${site}" title="클릭해 로그인하면 할인율이 표시됩니다">🔒 로그인 시</span></td>`;
     }
     const rate = r.discount_rate != null ? r.discount_rate + "%" : "—";
-    return `<td data-label="${shop} 할인률" class="col-rate"><span class="rate">${rate}</span></td>`;
+    const soldout = r.soldout ? ` <span class="soldout-tag" title="해당 면세점 품절">품절</span>` : "";
+    return `<td data-label="${shop} 할인률" class="col-rate"><span class="rate">${rate}</span>${soldout}</td>`;
   };
 
   const links = SHOP_ORDER
@@ -479,11 +497,11 @@ function extractExportRow(data, row) {
   const cell = (s) => {
     const r = shops[s];
     if (r && r.unsupported) return { rate: "미운영", url: null };
-    if (!r || !r.found) return { rate: errors[s] ? "실패" : "", url: null };
-    return {
-      rate: r.discount_rate != null ? r.discount_rate + "%" : "",
-      url: r.url || null,
-    };
+    if (!r || !r.found) return { rate: errors[s] ? "조회 오류" : "미취급", url: null };
+    let rate = r.discount_rate != null ? r.discount_rate + "%"
+      : (r.login_required ? "로그인 시 확인" : "");
+    if (r.soldout && rate) rate += " (품절)";
+    return { rate, url: r.url || null };
   };
   const shillaShop = shops["신라"];
   const priceOrigin = shillaShop && shillaShop.found && shillaShop.price_origin != null

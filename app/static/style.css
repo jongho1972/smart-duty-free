@@ -429,6 +429,55 @@ tbody tr:last-child { border-bottom: none; }
 .icon-link:hover { background: var(--blue-025); border-color: var(--blue-500); }
 
 .na { color: var(--slate-400); }
+.na.err { color: #99202a; font-weight: 600; cursor: help; }
+.na[title] { cursor: help; }
+
+/* 품절 태그 (할인율 옆) */
+.soldout-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #fbe9ea;
+  color: #99202a;
+  font-size: .68rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* 로그인 유도 배너 (가려진 몰이 있을 때 결과 상단) */
+.login-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 11px 16px;
+  border: 1px solid var(--blue-050, #DCE8F6);
+  border-radius: 10px;
+  background: var(--blue-025, #F4F7FB);
+}
+.login-cta-msg { font-size: .85rem; color: var(--navy-900, #0B2E5C); }
+.login-cta-msg b { font-weight: 700; }
+.login-cta button {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 7px;
+  background: var(--navy-900, #0B2E5C);
+  color: #fff;
+  font-size: .82rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s;
+}
+.login-cta button:hover { background: var(--navy-700, #13407F); }
+@media (max-width: 720px) {
+  .login-cta button { width: 100%; }
+}
+
 .login-hint {
   font-size: .72rem;
   font-weight: 700;
