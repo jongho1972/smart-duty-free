@@ -330,12 +330,12 @@ async function runBatch(rows) {
         <thead>
           <tr>
             <th class="col-num sortable" data-key="num" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">#</th>
-            <th class="col-sku sortable" data-key="sku" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">SKU.NO</th>
+            <th class="col-sku sortable" data-key="sku" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">SKU</th>
             <th class="sortable" data-key="brand" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">국문 브랜드명</th>
             <th class="sortable" data-key="branden" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">영문 브랜드명</th>
             <th class="sortable" data-key="category" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">상품유형</th>
             <th class="col-name sortable" data-key="name" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">상품명</th>
-            <th class="sortable" data-key="ref" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">REF.NO</th>
+            <th class="sortable" data-key="ref" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">REF</th>
             <th class="col-rate sortable" data-key="price" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">정가(USD)</th>
             <th class="col-rate sortable" data-key="shilla" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">신라</th>
             <th class="col-rate sortable" data-key="lotte" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">롯데</th>
@@ -665,12 +665,12 @@ function buildProductRow(data, row, num) {
         data-ref="${escapeHtml(query.ref_no || "")}" data-price="${priceVal}"
         data-shilla="${rateVal("신라")}" data-lotte="${rateVal("롯데")}" data-ssg="${rateVal("신세계")}">
       <td data-label="#" class="col-num">${num}</td>
-      <td data-label="SKU.NO" class="col-sku">${escapeHtml(row.sku)}</td>
+      <td data-label="SKU" class="col-sku">${escapeHtml(row.sku)}</td>
       <td data-label="국문 브랜드명">${escapeHtml(query.brand || "")}</td>
       <td data-label="영문 브랜드명">${escapeHtml(query.brand_en || "")}</td>
       <td data-label="상품유형">${escapeHtml(query.category || "")}</td>
       <td data-label="상품명" class="col-name">${escapeHtml(query.product || "")}</td>
-      <td data-label="REF.NO" class="col-ref">${escapeHtml(query.ref_no || "")}</td>
+      <td data-label="REF" class="col-ref">${escapeHtml(query.ref_no || "")}</td>
       <td data-label="정가(USD)" class="col-rate">${fmtPrice(shops["신라"])}</td>
       ${rateCell("신라")}
       ${rateCell("롯데")}
@@ -753,7 +753,7 @@ function buildErrorRow(row, msg, num) {
   return `
     <tr data-num="${num || ""}">
       <td data-label="#" class="col-num">${num || ""}</td>
-      <td data-label="SKU.NO" class="col-sku">${escapeHtml(row.sku || "")}</td>
+      <td data-label="SKU" class="col-sku">${escapeHtml(row.sku || "")}</td>
       <td data-label="국문 브랜드명" class="na" colspan="10">${errMsg}</td>
     </tr>`;
 }
