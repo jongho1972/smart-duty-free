@@ -328,11 +328,11 @@ async function runBatch(rows) {
   mallNoteEl.hidden = currentMall === "kr";
   const prog = document.getElementById("batch-progress");
   prog.hidden = false;
-  // 로그인 유도 배너: 클릭 시 현재 가려진 몰을 모달에 표시
-  const cta = results.querySelector("#login-cta");
+  // 로그인 유도 배너: 아직 로그인 안 한 게이팅 몰만 대상(로그인됨 상태와 모순 방지)
   const ctaBtn = results.querySelector("#login-cta-btn");
   ctaBtn?.addEventListener("click", () => {
-    openLoginModal(gatedShops.size ? [...gatedShops] : "all");
+    const pend = pendingLoginShops();
+    openLoginModal(pend.length ? pend : "all");
   });
   // 결과가 입력폼·안내문 아래 멀리 렌더되므로 조회 시작과 함께 결과로 스크롤
   results.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -371,9 +371,28 @@ async function runBatch(rows) {
     prog.textContent = "";
     excelBtn.disabled = exportRows.length === 0;
     setBatchLoading(false);
-    // 가려진 몰이 남아 있으면 로그인 유도 배너 노출(이미 로그인해도 남은 행이 있으면 유지)
-    if (cta) cta.hidden = gatedShops.size === 0;
+    updateLoginCta();
   }
+}
+
+// 가려진 몰(gatedShops) 중 아직 로그인 성공하지 않은 몰만 반환 — 배너·모달 대상
+function pendingLoginShops() {
+  const li = loadLoginResult() || {};
+  return [...gatedShops].filter(
+    (s) => (s === "lotte" && !li.lotteOk) || (s === "ssg" && !li.ssgOk)
+  );
+}
+
+// 로그인 유도 배너 갱신: 아직 로그인 안 한 게이팅 몰만 대상(없으면 숨김 → 로그인됨 상태와 모순 방지)
+function updateLoginCta() {
+  const cta = results.querySelector("#login-cta");
+  if (!cta) return;
+  const pend = pendingLoginShops();
+  if (!pend.length) { cta.hidden = true; return; }
+  const names = pend.map((s) => (s === "lotte" ? "롯데" : "신세계")).join("·");
+  const msg = cta.querySelector(".login-cta-msg");
+  if (msg) msg.innerHTML = `🔒 <b>${names} 할인율</b>은 회원 로그인 후 표시됩니다.`;
+  cta.hidden = false;
 }
 
 function setBatchLoading(on) {
@@ -429,6 +448,7 @@ async function refreshGatedRows() {
   if (gen === batchGeneration) {
     gatedRows = still;
     gatedShops = newShops;
+    updateLoginCta();   // 재조회로 로그인 풀린 몰이 있으면 배너 숨김/갱신
   }
 }
 
