@@ -352,6 +352,21 @@ body.loading .btn-label { visibility: hidden; }
 #excel-btn:hover:not([disabled]) { background: var(--blue-025); border-color: var(--blue-500); }
 #excel-btn[disabled] { opacity: .5; cursor: default; }
 
+/* 모바일 정렬 셀렉트 — 데스크톱은 헤더 클릭 정렬을 쓰므로 숨김 */
+.sort-mobile { display: none; }
+.sort-mobile select {
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--navy-900);
+  background: #fff;
+  border: 1.5px solid var(--slate-200);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin-left: 6px;
+  cursor: pointer;
+}
+
 .table-wrap {
   border: 1px solid var(--slate-100);
   border-radius: 12px;
@@ -369,6 +384,24 @@ thead th {
   border-bottom: 1px solid var(--slate-100);
   white-space: nowrap;
 }
+
+/* 정렬 가능한 헤더 */
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+thead th.sortable:hover { background: var(--blue-050, #eaf1fb); }
+thead th.sortable:focus-visible { outline: 2px solid var(--blue-500); outline-offset: -2px; }
+/* 정렬 방향 화살표: 비활성 컬럼은 옅게, 활성 컬럼은 진하게 */
+thead th.sortable::after {
+  content: "↕";
+  margin-left: 5px;
+  font-size: .78em;
+  color: var(--slate-400);
+  opacity: .5;
+}
+thead th.sortable.sorted-asc::after { content: "▲"; color: var(--navy-900); opacity: 1; }
+thead th.sortable.sorted-desc::after { content: "▼"; color: var(--navy-900); opacity: 1; }
 
 /* 할인률 컬럼(8~10번째) 우측 정렬 */
 .compare-table th.col-rate,
@@ -545,6 +578,14 @@ footer.footnote a:hover { color: var(--navy-900); }
   #batch-btn { width: 100%; justify-self: stretch; padding: 14px; }
   .cred-row { flex-wrap: wrap; }
   .cred-input { min-width: 120px; }
+  .sort-mobile {
+    display: flex;
+    align-items: center;
+    margin-right: auto;
+    font-size: var(--fs-caption);
+    font-weight: 700;
+    color: var(--navy-900);
+  }
   thead { display: none; }
   table, tbody, tr, td { display: block; width: 100%; }
   tbody tr { padding: 14px 16px; }

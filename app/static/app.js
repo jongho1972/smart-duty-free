@@ -252,6 +252,13 @@ let gatedRows = [];
 let gatedShops = new Set();
 // 조회 세대 토큰 — 재조회(refreshGatedRows) 도중 새 배치가 시작되면 옛 재조회를 중단
 let batchGeneration = 0;
+// 결과표 정렬 상태 — {key, type, dir}. key=null이면 원래(조회) 순서
+let sortState = { key: null, type: null, dir: null };
+// 정렬 키별 자료형(모바일 셀렉트용 — 데스크톱 헤더는 data-type 속성 사용)
+const SORT_KEY_TYPES = {
+  num: "num", price: "num", shilla: "num", lotte: "num", ssg: "num",
+  sku: "text", brand: "text", branden: "text", category: "text", name: "text", ref: "text",
+};
 
 // 몰별 결과 캐시 — 이미 조회한 몰로 토글하면 재조회 없이 즉시 복원(KR↔CN↔KR 반복 재조회 방지).
 // key = `${mall}|${skus.join(',')}`. 새 조회(폼 제출)·로그인 후 재조회 시 무효화.
@@ -281,6 +288,7 @@ batchForm.addEventListener("submit", async (e) => {
     truncated = true;
   }
   clearMallCache();   // 새 조회 → 이전 SKU 세트의 몰 캐시 폐기
+  sortState = { key: null, type: null, dir: null };   // 새 SKU 세트 → 정렬 초기화(몰 토글에는 유지)
   await runBatch(rows);
   if (truncated) {
     flashHint(`한 번에 최대 ${MAX_BATCH_ROWS}개까지만 비교합니다. 나머지는 다시 나눠 조회해 주세요.`);
@@ -302,23 +310,36 @@ async function runBatch(rows) {
       <button type="button" id="login-cta-btn">로그인하고 전체 비교</button>
     </div>
     <div class="results-toolbar">
+      <label class="sort-mobile">정렬
+        <select id="sort-select" aria-label="결과 정렬">
+          <option value="num:asc">기본 순서</option>
+          <option value="price:desc">정가 높은순</option>
+          <option value="price:asc">정가 낮은순</option>
+          <option value="shilla:desc">신라 할인율 높은순</option>
+          <option value="shilla:asc">신라 할인율 낮은순</option>
+          <option value="lotte:desc">롯데 할인율 높은순</option>
+          <option value="ssg:desc">신세계 할인율 높은순</option>
+          <option value="brand:asc">국문 브랜드명순</option>
+          <option value="name:asc">상품명순</option>
+        </select>
+      </label>
       <button type="button" id="excel-btn" disabled>엑셀 다운로드</button>
     </div>
     <div class="table-wrap">
       <table class="compare-table">
         <thead>
           <tr>
-            <th class="col-num">#</th>
-            <th class="col-sku">SKU.NO</th>
-            <th>국문 브랜드명</th>
-            <th>영문 브랜드명</th>
-            <th>상품유형</th>
-            <th class="col-name">상품명</th>
-            <th>REF.NO</th>
-            <th class="col-rate">정가(USD)</th>
-            <th class="col-rate">신라</th>
-            <th class="col-rate">롯데</th>
-            <th class="col-rate">신세계</th>
+            <th class="col-num sortable" data-key="num" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">#</th>
+            <th class="col-sku sortable" data-key="sku" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">SKU.NO</th>
+            <th class="sortable" data-key="brand" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">국문 브랜드명</th>
+            <th class="sortable" data-key="branden" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">영문 브랜드명</th>
+            <th class="sortable" data-key="category" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">상품유형</th>
+            <th class="col-name sortable" data-key="name" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">상품명</th>
+            <th class="sortable" data-key="ref" data-type="text" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">REF.NO</th>
+            <th class="col-rate sortable" data-key="price" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">정가(USD)</th>
+            <th class="col-rate sortable" data-key="shilla" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">신라</th>
+            <th class="col-rate sortable" data-key="lotte" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">롯데</th>
+            <th class="col-rate sortable" data-key="ssg" data-type="num" role="button" tabindex="0" aria-sort="none" title="클릭해 정렬">신세계</th>
             <th>링크</th>
           </tr>
         </thead>
@@ -335,6 +356,7 @@ async function runBatch(rows) {
   mallToggleEl.hidden = false;
   toolbar.after(mallNoteEl);
   mallNoteEl.hidden = currentMall === "kr";
+  refreshSortUI();   // 새로 그린 헤더·셀렉트를 (유지 중인) 정렬 상태에 맞춰 동기화
   const prog = document.getElementById("batch-progress");
   prog.hidden = false;
   // 로그인 유도 배너: 아직 로그인 안 한 게이팅 몰만 대상(로그인됨 상태와 모순 방지)
@@ -367,6 +389,7 @@ async function runBatch(rows) {
         tr = buildErrorRow(row, null, i + 1);
       }
       tbody.insertAdjacentHTML("beforeend", tr);
+      if (sortState.key) applySort();   // 정렬 활성 중이면 새 행도 제자리에 배치
       exportRows.push(extractExportRow(data, row));
       // 롯데·신세계 할인율이 로그인에 가려진 행·몰 기록 → 로그인 성공 시 이 행만 재조회
       const gs = gatedShopsOf(data);
@@ -403,6 +426,8 @@ function restoreMallCache(snap) {
   const excelBtn = results.querySelector("#excel-btn");
   if (excelBtn) excelBtn.disabled = exportRows.length === 0;
   mallNoteEl.hidden = currentMall === "kr";
+  if (sortState.key) applySort();   // 유지 중인 정렬을 복원된 행에도 적용
+  refreshSortUI();                  // 화살표·셀렉트를 정렬 상태에 동기화
   updateLoginCta();
 }
 
@@ -479,6 +504,7 @@ async function refreshGatedRows() {
   if (gen === batchGeneration) {
     gatedRows = still;
     gatedShops = newShops;
+    if (sortState.key) applySort();   // 할인율이 채워진 행을 정렬 위치로 재배치
     updateLoginCta();   // 재조회로 로그인 풀린 몰이 있으면 배너 숨김/갱신
     clearMallCache();   // 로그인으로 결과가 바뀜 → 몰 캐시 폐기(토글 시 최신 재조회)
     // 현재 몰의 갱신된 결과는 다시 캐시해 둔다(같은 몰 재토글 시 재조회 회피)
@@ -499,6 +525,89 @@ function flashHint(msg) {
   hint.style.color = "#99202a";
   setTimeout(() => (hint.style.color = ""), 2600);
 }
+
+// ── 결과표 컬럼 정렬 ────────────────────────────────────────────────────────
+// 현재 sortState 기준으로 tbody의 행을 재배치. 빈 값(미취급·로그인 시 등)은
+// 방향과 무관하게 항상 하단으로 모은다(정직한 '없음'을 위/아래로 흩뿌리지 않음).
+function applySort() {
+  const tbody = results.querySelector("#compare-body");
+  if (!tbody || !sortState.key) return;
+  const { key, type, dir } = sortState;
+  const rows = [...tbody.querySelectorAll("tr")];
+  rows.sort((a, b) => {
+    const va = a.getAttribute("data-" + key);
+    const vb = b.getAttribute("data-" + key);
+    const aEmpty = va == null || va === "";
+    const bEmpty = vb == null || vb === "";
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1;    // 빈 값은 항상 아래로
+    if (bEmpty) return -1;
+    let cmp;
+    if (type === "num") cmp = Number(va) - Number(vb);
+    else cmp = String(va).localeCompare(String(vb), "ko");
+    return dir === "desc" ? -cmp : cmp;
+  });
+  rows.forEach((r) => tbody.appendChild(r));
+}
+
+// 헤더의 정렬 방향 표시(화살표·aria-sort) 갱신
+function updateSortIndicators() {
+  results.querySelectorAll("thead th.sortable").forEach((th) => {
+    th.classList.remove("sorted-asc", "sorted-desc");
+    if (th.dataset.key === sortState.key) {
+      const desc = sortState.dir === "desc";
+      th.classList.add(desc ? "sorted-desc" : "sorted-asc");
+      th.setAttribute("aria-sort", desc ? "descending" : "ascending");
+    } else {
+      th.setAttribute("aria-sort", "none");
+    }
+  });
+}
+
+// 모바일 정렬 셀렉트를 현재 정렬 상태에 맞춰 동기화(해당 옵션이 있을 때만)
+function syncSortSelect() {
+  const sel = results.querySelector("#sort-select");
+  if (!sel) return;
+  const want = sortState.key ? `${sortState.key}:${sortState.dir}` : "num:asc";
+  if ([...sel.options].some((o) => o.value === want)) sel.value = want;
+}
+
+// 헤더 화살표 + 모바일 셀렉트를 한 번에 정렬 상태와 일치시킨다(모든 렌더 경로 공용)
+function refreshSortUI() {
+  updateSortIndicators();
+  syncSortSelect();
+}
+
+// 정렬 가능한 헤더 클릭 → asc ↔ desc 토글(다른 컬럼이면 asc부터). '#'로 원래 순서 복원.
+results.addEventListener("click", (e) => {
+  const th = e.target.closest && e.target.closest("thead th.sortable");
+  if (!th || !results.contains(th)) return;
+  const key = th.dataset.key;
+  const type = th.dataset.type || "text";
+  const dir = sortState.key === key && sortState.dir === "asc" ? "desc" : "asc";
+  sortState = { key, type, dir };
+  applySort();
+  refreshSortUI();
+});
+
+// 헤더 키보드 정렬(Enter/Space) — 접근성
+results.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const th = e.target.closest && e.target.closest("thead th.sortable");
+  if (!th || !results.contains(th)) return;
+  e.preventDefault();
+  th.click();
+});
+
+// 모바일 정렬 셀렉트(헤더가 숨겨지는 좁은 화면용) — value="key:dir"
+results.addEventListener("change", (e) => {
+  const sel = e.target.closest && e.target.closest("#sort-select");
+  if (!sel) return;
+  const [key, dir] = sel.value.split(":");
+  sortState = { key, type: SORT_KEY_TYPES[key] || "text", dir: dir || "asc" };
+  applySort();
+  refreshSortUI();
+});
 
 // 조회 결과 1건 → sku_lookup 포맷 행 + 경쟁사 할인률 컬럼
 function buildProductRow(data, row, num) {
@@ -541,8 +650,20 @@ function buildProductRow(data, row, num) {
     .map((s) => `<a class="icon-link" href="${escapeHtml(shops[s].url)}" target="_blank" rel="noopener" title="${s}">${s} ↗</a>`)
     .join("");
 
+  // 정렬용 값: 할인율은 숫자만(미취급·로그인 시·품절은 빈값 → 정렬 시 하단으로)
+  const rateVal = (shop) => {
+    const r = shops[shop];
+    return r && r.found && r.discount_rate != null ? r.discount_rate : "";
+  };
+  const priceVal = shops["신라"] && shops["신라"].found && shops["신라"].price_origin != null
+    ? Number(shops["신라"].price_origin) : "";
+
   return `
-    <tr id="cmp-row-${num}">
+    <tr id="cmp-row-${num}" data-num="${num}" data-sku="${escapeHtml(row.sku)}"
+        data-brand="${escapeHtml(query.brand || "")}" data-branden="${escapeHtml(query.brand_en || "")}"
+        data-category="${escapeHtml(query.category || "")}" data-name="${escapeHtml(query.product || "")}"
+        data-ref="${escapeHtml(query.ref_no || "")}" data-price="${priceVal}"
+        data-shilla="${rateVal("신라")}" data-lotte="${rateVal("롯데")}" data-ssg="${rateVal("신세계")}">
       <td data-label="#" class="col-num">${num}</td>
       <td data-label="SKU.NO" class="col-sku">${escapeHtml(row.sku)}</td>
       <td data-label="국문 브랜드명">${escapeHtml(query.brand || "")}</td>
@@ -630,7 +751,7 @@ function fmtPrice(shopData) {
 function buildErrorRow(row, msg, num) {
   const errMsg = msg ? `<span style="color:#99202a;font-size:.8rem">${escapeHtml(msg)}</span>` : "—";
   return `
-    <tr>
+    <tr data-num="${num || ""}">
       <td data-label="#" class="col-num">${num || ""}</td>
       <td data-label="SKU.NO" class="col-sku">${escapeHtml(row.sku || "")}</td>
       <td data-label="국문 브랜드명" class="na" colspan="10">${errMsg}</td>
